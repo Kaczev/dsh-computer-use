@@ -133,3 +133,10 @@ computer use 在 Windows 上最阴险的失败都是**静默的**——返回 ok
   无统一 Windows.winmd；24H2+ 的 Graphics 系合并进 Windows.Graphics.winmd）
 - WGC 助手编译需 .NET Core 参考程序集（`Microsoft.NETCore.App.Ref` pack）——
   缺失时 WGC 捕获优雅降级，不报错
+
+
+## 2026-10-13：Issue #18 缓存观察与响应诊断
+
+逐节点缓存配合惰性 TreeWalker 保留节点/深度上限；RuntimeId 用 GetCachedPropertyValue(RuntimeIdProperty)，full 的 value/patterns 同样缓存。新增时间预算、部分树诊断、WM_NULL 响应探测、激活失败 warning 和 element_info 详细度参数。回归覆盖确定性 Provider、实际 WinForms/Chromium 及人为阻塞后的恢复。新评论脚本的异步 stdout/stderr 读取修复有效，但 A/B 每节点耗时分母不同，不能直接引用 7.7 倍加速；API 调用计数也不等同于直接测得的 COM 往返次数。原报告的网易云特定版本尚待复测。
+
+可运行 npm test；独立实机夹具命令为 node test/uia-chromium-smoke.mjs <结果目录> 与 node test/uia-native-smoke.mjs <结果目录>。Chromium 基线比较可指定 WCU_BASELINE_ROOT 为旧版本 checkout，使用相同 raw/full 或 raw/compact、节点与深度参数，并交换运行顺序。

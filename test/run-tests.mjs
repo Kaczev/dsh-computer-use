@@ -1,4 +1,5 @@
 // Each suite gets a separate process and TEMP/TMP directory. No physical input.
+// Live UIA suites open and close only dedicated fixture windows.
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -19,6 +20,9 @@ const suites = [
   ['activation-cancellation', process.execPath, ['test/activation-cancellation.mjs']],
   ['native-window-discovery', process.execPath, ['test/native-window-discovery.mjs']],
   ['native-window-contract', powershell, ['-NoProfile', '-File', 'test/native-window-contract.ps1']],
+  ['uia-cache-contract', powershell, ['-NoProfile', '-File', 'test/uia-cache-contract.ps1']],
+  ['uia-native-smoke', process.execPath, ['test/uia-native-smoke.mjs', path.join(root, 'uia-native-smoke')]],
+  ['uia-chromium-smoke', process.execPath, ['test/uia-chromium-smoke.mjs', path.join(root, 'uia-chromium-smoke')]],
   ['ocr-query-contract', powershell, ['-NoProfile', '-File', 'test/ocr-query-contract.ps1']],
   ['native-input-errors', powershell, ['-NoProfile', '-File', 'test/native-input-errors.ps1']]
 ];

@@ -33,6 +33,7 @@ jobs:
 
       # Runtime caches and artifacts are isolated per suite. Read-only smoke
       # checks use the desktop; input/activation/coordinate tests use fake APIs.
+      # UIA cache smokes open/close only owned native/Chromium fixture windows.
       - name: Isolated backend regression suite
         run: npm test
         timeout-minutes: 15

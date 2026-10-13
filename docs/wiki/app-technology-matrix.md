@@ -20,7 +20,7 @@ The plugin defaults to `viewMode="control"`, `includeOffscreen=false`, and `deta
 | WinForms | Usually exposes named controls and values | `control` | Control ids/classes can be verbose, but element paths are stable while the form is unchanged. |
 | WPF | Usually rich UIA roles and patterns | `control` or `content` | `content` is useful for reading; `control` is better before actions. |
 | UWP/WinUI | Rich tree, sometimes wrapped by `ApplicationFrameWindow` | `control` | The launched process can differ from the top-level window process; prefer HWND targeting. |
-| Electron/Chromium/Tauri | Browser accessibility tree inside a native host window | `control` | Trees can be deep and can include hidden web views. Prefer `find`; use `raw` only for missing nodes. |
+| Electron/Chromium/CEF/Tauri | Browser accessibility tree inside a native host window | Scoped `control` | Trees can be deep and expensive to instantiate, including `Chrome_WidgetWin*` / `OrpheusBrowserHost` targets. Cached, lazy traversal bounds visited nodes and checks a time budget; a single provider call can still block. If a call truncates/times out, check target responsiveness before retrying and use screenshot/OCR once it recovers. Use `raw` only for missing nodes. |
 | Mozilla/XUL apps such as Thunderbird | Browser-like tree plus many hidden menus and panels | `control`, `includeOffscreen=false` | Raw traversal is especially noisy because hidden popups and inactive panels are present in the provider tree. |
 | Custom canvas/game/PDF views | Sparse or visual-only tree | screenshot plus coordinates | Use UIA for window targeting, then screenshot and coordinate actions. |
 
@@ -37,6 +37,8 @@ Other Windows automation stacks use the same general pattern: accessibility firs
 - Electron exposes Chromium accessibility support through platform accessibility APIs, so native automation sees web-derived roles inside a host window: https://www.electronjs.org/docs/latest/api/app
 
 ## Current Test Coverage
+
+CI runs disposable WinForms and Electron/Chromium fixtures. These verify actual cached value/pattern/RuntimeId reads, three tree views, node/time limits, renderer responsiveness, and a native UI thread deliberately paused for three seconds (hung-window rejection and recovery). They use only their own windows and no physical input. The issue #18 reporter's NetEase Cloud Music 3.1.41 / Windows build 22621 environment has not been reproduced by these fixtures; no general guarantee that a broken CEF provider cannot hang is implied.
 
 The safe live smoke test covers:
 

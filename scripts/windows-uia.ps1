@@ -218,6 +218,16 @@ public static class WindowsComputerUseNative {
     return result.ToArray();
   }
 
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, UIntPtr wParam,
+    IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
+  public static bool IsResponsive(IntPtr hwnd) {
+    UIntPtr result;
+    // WM_NULL, SMTO_BLOCK | SMTO_ABORTIFHUNG. Never enter the UIA provider here.
+    return IsWindow(hwnd) && SendMessageTimeout(hwnd, 0, UIntPtr.Zero,
+      IntPtr.Zero, 3, 200, out result) != IntPtr.Zero;
+  }
+
   public const byte VK_MENU = 0x12;
   public const uint KEYEVENTF_KEYUP = 0x0002;
 
@@ -402,46 +412,75 @@ function Get-ValueText {
   return $null
 }
 
+function New-ElementCacheRequest {
+  param([string]$DetailLevel = "compact")
+  $cache = New-Object System.Windows.Automation.CacheRequest
+  $cache.TreeScope = [System.Windows.Automation.TreeScope]::Element
+  $cache.TreeFilter = [System.Windows.Automation.Automation]::RawViewCondition
+  # Full keeps a live reference for navigation/actions; all observation reads
+  # below use Cached, including RuntimeId. Never fetch an entire subtree.
+  $cache.AutomationElementMode = [System.Windows.Automation.AutomationElementMode]::Full
+  foreach ($name in @('Name','AutomationId','ClassName','ControlType','BoundingRectangle',
+      'IsEnabled','IsOffscreen','HasKeyboardFocus','ProcessId','NativeWindowHandle','RuntimeId')) {
+    $cache.Add([System.Windows.Automation.AutomationElement]::("${name}Property"))
+  }
+  if ($DetailLevel -eq "full") {
+    $cache.Add([System.Windows.Automation.AutomationElement]::LocalizedControlTypeProperty)
+    $cache.Add([System.Windows.Automation.ValuePattern]::ValueProperty)
+    foreach ($pattern in @([System.Windows.Automation.InvokePattern]::Pattern,
+        [System.Windows.Automation.ValuePattern]::Pattern, [System.Windows.Automation.TogglePattern]::Pattern,
+        [System.Windows.Automation.SelectionItemPattern]::Pattern,
+        [System.Windows.Automation.ExpandCollapsePattern]::Pattern, [System.Windows.Automation.ScrollItemPattern]::Pattern)) {
+      $cache.Add($pattern)
+    }
+  }
+  return $cache
+}
+
 function Convert-ElementInfo {
   param(
     [System.Windows.Automation.AutomationElement]$Element,
     [string]$Id = $null,
     [int]$Depth = 0,
-    [string]$DetailLevel = "full"
+    [string]$DetailLevel = "full",
+    [switch]$UseCache
   )
-
-  $rect = Convert-Rect (Invoke-Safe { $Element.Current.BoundingRectangle } $null)
-  $processId = Invoke-Safe { $Element.Current.ProcessId } $null
-  $nativeHwnd = Invoke-Safe { $Element.Current.NativeWindowHandle } $null
-  # RuntimeId is stable for the life of the owning process (survives UI
-  # re-layouts that shift tree paths), so prefer a runtimeId-based id.
-  $rtArr = Invoke-Safe { @($Element.GetRuntimeId()) } $null
+  if (-not $UseCache) {
+    $Element = $Element.GetUpdatedCache((New-ElementCacheRequest $DetailLevel))
+  }
+  $rect = Convert-Rect (Invoke-Safe { $Element.Cached.BoundingRectangle } $null)
+  $rtArr = Invoke-Safe { @($Element.GetCachedPropertyValue([System.Windows.Automation.AutomationElement]::RuntimeIdProperty)) } $null
   $rtStr = $null
   if ($null -ne $rtArr -and $rtArr.Count -ge 2) { $rtStr = ($rtArr | ForEach-Object { [int]$_ }) -join "-" }
   $info = [ordered]@{
     id = if ($null -ne $rtStr) { "uia:rt:$rtStr" } else { $Id }
     depth = $Depth
-    name = Invoke-Safe { $Element.Current.Name } ""
-    automationId = Invoke-Safe { $Element.Current.AutomationId } ""
-    className = Invoke-Safe { $Element.Current.ClassName } ""
-    controlType = Get-ControlTypeName (Invoke-Safe { $Element.Current.ControlType } $null)
+    name = Invoke-Safe { $Element.Cached.Name } ""
+    automationId = Invoke-Safe { $Element.Cached.AutomationId } ""
+    className = Invoke-Safe { $Element.Cached.ClassName } ""
+    controlType = Get-ControlTypeName (Invoke-Safe { $Element.Cached.ControlType } $null)
     boundingBox = $rect
-    isEnabled = Invoke-Safe { $Element.Current.IsEnabled } $null
-    isOffscreen = Invoke-Safe { $Element.Current.IsOffscreen } $null
-    hasKeyboardFocus = Invoke-Safe { $Element.Current.HasKeyboardFocus } $null
+    isEnabled = Invoke-Safe { $Element.Cached.IsEnabled } $null
+    isOffscreen = Invoke-Safe { $Element.Cached.IsOffscreen } $null
+    hasKeyboardFocus = Invoke-Safe { $Element.Cached.HasKeyboardFocus } $null
   }
   if ($DetailLevel -eq "full") {
-    $value = Get-ValueText $Element
-    $patterns = [string[]](Get-Patterns $Element)
-    $info["localizedControlType"] = Invoke-Safe { $Element.Current.LocalizedControlType } ""
-    $info["processId"] = $processId
-    $info["nativeWindowHandle"] = $nativeHwnd
-    $info["runtimeId"] = if ($null -ne $rtStr) { $rtStr } else { $null }
-    $info["value"] = $value
-    $info["patterns"] = $patterns
+    $valuePattern = Invoke-Safe { $Element.GetCachedPattern([System.Windows.Automation.ValuePattern]::Pattern) } $null
+    $patterns = New-Object System.Collections.Generic.List[string]
+    foreach ($name in @('Invoke','Value','Toggle','SelectionItem','ExpandCollapse','ScrollItem')) {
+      $patternType = "System.Windows.Automation.${name}Pattern" -as [type]
+      if ($null -ne (Invoke-Safe { $Element.GetCachedPattern($patternType::Pattern) } $null)) { $patterns.Add($name) }
+    }
+    $info["localizedControlType"] = Invoke-Safe { $Element.Cached.LocalizedControlType } ""
+    $info["processId"] = Invoke-Safe { $Element.Cached.ProcessId } $null
+    $info["nativeWindowHandle"] = Invoke-Safe { $Element.Cached.NativeWindowHandle } $null
+    $info["runtimeId"] = $rtStr
+    $info["value"] = if ($null -ne $valuePattern) { Invoke-Safe { $valuePattern.Cached.Value } $null } else { $null }
+    $info["patterns"] = [string[]]$patterns.ToArray()
   } else {
-    if ($Depth -le 1 -and $null -ne $processId) { $info["processId"] = $processId }
-    if ($null -ne $nativeHwnd -and [int64]$nativeHwnd -ne 0) { $info["nativeWindowHandle"] = $nativeHwnd }
+    if ($Depth -le 1) { $info["processId"] = Invoke-Safe { $Element.Cached.ProcessId } $null }
+    $nativeHwnd = Invoke-Safe { $Element.Cached.NativeWindowHandle } 0
+    if ($nativeHwnd) { $info["nativeWindowHandle"] = $nativeHwnd }
   }
   return $info
 }
@@ -1223,53 +1262,64 @@ function Get-ScopeRoot {
 function Get-Children {
   param(
     [System.Windows.Automation.AutomationElement]$Element,
-    [string]$ViewMode = "control",
-    [bool]$IncludeOffscreen = $false
+    [string]$ViewMode = "control", [bool]$IncludeOffscreen = $false,
+    [int]$MaxChildren = 4096
   )
+  # Match the filtered TreeWalker projection used by trees (including nodes
+  # promoted through non-control containers), so legacy path ids stay resolvable.
   $items = New-Object "System.Collections.Generic.List[System.Windows.Automation.AutomationElement]"
   try {
-    $condition = Get-ViewCondition -ViewMode $ViewMode -IncludeOffscreen $IncludeOffscreen
-    $collection = $Element.FindAll([System.Windows.Automation.TreeScope]::Children, $condition)
-  } catch {
-    return ,$items
-  }
-  if ($null -eq $collection) { return ,$items }
-  for ($i = 0; $i -lt $collection.Count; $i++) {
-    $items.Add($collection.Item($i))
-  }
+    $cache = New-ElementCacheRequest "compact"
+    $walker = New-Object System.Windows.Automation.TreeWalker -ArgumentList (Get-ViewCondition $ViewMode $IncludeOffscreen)
+    $child = $walker.GetFirstChild($Element, $cache)
+    while ($null -ne $child -and $items.Count -lt $MaxChildren) {
+      $items.Add($child)
+      if ($items.Count -ge $MaxChildren) { break }
+      $child = $walker.GetNextSibling($child, $cache)
+    }
+  } catch { }
   return ,$items
+}
+
+function Test-TreeBudget {
+  param([object]$Traversal)
+  if ($Traversal.watch.ElapsedMilliseconds -ge $Traversal.budgetMs) {
+    $Traversal.reason = "timeBudget"
+    return $false
+  }
+  return $true
 }
 
 function Convert-Tree {
   param(
     [System.Windows.Automation.AutomationElement]$Element,
-    [string]$Path,
-    [int]$Depth,
-    [int]$MaxDepth,
-    [ref]$Count,
-    [int]$MaxNodes,
-    [string]$ViewMode = "control",
-    [bool]$IncludeOffscreen = $false,
-    [string]$DetailLevel = "compact"
+    [string]$Path, [int]$Depth, [int]$MaxDepth, [ref]$Count, [int]$MaxNodes,
+    [string]$ViewMode = "control", [bool]$IncludeOffscreen = $false,
+    [string]$DetailLevel = "compact", [object]$Traversal
   )
-
-  if ($Count.Value -ge $MaxNodes) { return $null }
-  $id = "uia:$Path"
-  $info = Convert-ElementInfo -Element $Element -Id $id -Depth $Depth -DetailLevel $DetailLevel
-  $Count.Value = $Count.Value + 1
+  if ($Count.Value -ge $MaxNodes) { $Traversal.reason = "maxNodes"; return $null }
+  if (-not (Test-TreeBudget $Traversal)) { return $null }
+  $info = Convert-ElementInfo -Element $Element -Id "uia:$Path" -Depth $Depth -DetailLevel $DetailLevel -UseCache
+  $Count.Value++
   $childrenOut = New-Object System.Collections.Generic.List[object]
-
-  if ($Depth -lt $MaxDepth) {
-    $children = Get-Children -Element $Element -ViewMode $ViewMode -IncludeOffscreen $IncludeOffscreen
-    if ($null -ne $children) {
-      for ($i = 0; $i -lt $children.Count; $i++) {
-        if ($Count.Value -ge $MaxNodes) { break }
-        $childPath = "$Path.$i"
-        $child = Convert-Tree -Element $children.Item($i) -Path $childPath -Depth ($Depth + 1) -MaxDepth $MaxDepth -Count $Count -MaxNodes $MaxNodes -ViewMode $ViewMode -IncludeOffscreen $IncludeOffscreen -DetailLevel $DetailLevel
-        if ($null -ne $child) { $childrenOut.Add($child) }
+  if ($Depth -lt $MaxDepth -and $Count.Value -lt $MaxNodes -and (Test-TreeBudget $Traversal)) {
+    try {
+      $child = $Traversal.walker.GetFirstChild($Element, $Traversal.cache)
+      $i = 0
+      while ($null -ne $child) {
+        if ($Count.Value -ge $MaxNodes -or -not (Test-TreeBudget $Traversal)) { break }
+        $childOut = Convert-Tree -Element $child -Path "$Path.$i" -Depth ($Depth + 1) -MaxDepth $MaxDepth -Count $Count -MaxNodes $MaxNodes -ViewMode $ViewMode -IncludeOffscreen $IncludeOffscreen -DetailLevel $DetailLevel -Traversal $Traversal
+        if ($null -ne $childOut) { $childrenOut.Add($childOut) }
+        if ($Count.Value -ge $MaxNodes -or $null -ne $Traversal.reason -or -not (Test-TreeBudget $Traversal)) { break }
+        $child = $Traversal.walker.GetNextSibling($child, $Traversal.cache)
+        $i++
       }
+    } catch {
+      $Traversal.reason = "providerError"
+      $Traversal.error = $_.Exception.Message
     }
   }
+  if ($Count.Value -ge $MaxNodes -and $null -eq $Traversal.reason) { $Traversal.reason = "maxNodes" }
   $info["children"] = @($childrenOut.ToArray())
   return $info
 }
@@ -1334,7 +1384,7 @@ function Resolve-Element {
     }
     for ($i = 1; $i -lt $parts.Length; $i++) {
       $index = [int]$parts[$i]
-      $children = Get-Children -Element $element -ViewMode $viewMode -IncludeOffscreen $includeOffscreen
+      $children = Get-Children -Element $element -ViewMode $viewMode -IncludeOffscreen $includeOffscreen -MaxChildren ($index + 1)
       if ($null -eq $children -or $index -lt 0 -or $index -ge $children.Count) {
         throw "Element path '$ElementId' is stale or out of range at segment $i."
       }
@@ -1705,30 +1755,80 @@ function Capture-Screenshot {
   return $meta
 }
 
+function Get-ObservationWindow {
+  param([object]$InputObject, [string]$Scope = "active_window")
+  if ($Scope -eq "desktop") { return $null }
+  if (Has-WindowTarget $InputObject) {
+    $fallback = $null
+    foreach ($info in (Get-NativeWindowList -IncludeInvisible $true -MaxWindows 4096)) {
+      if (-not (Test-TargetMatch $info $InputObject)) { continue }
+      if (-not $info.isOffscreen) { return $info }
+      if ($null -eq $fallback) { $fallback = $info }
+    }
+    if ($null -eq $fallback) { throw "No top-level window matched the requested target." }
+    return $fallback
+  }
+  $hwnd = [WindowsComputerUseNative]::GetForegroundWindow().ToInt64()
+  foreach ($info in (Get-NativeWindowList -IncludeInvisible $true -MaxWindows 4096)) {
+    if ([int64]$info.nativeWindowHandle -eq $hwnd) { return $info }
+  }
+  return $null
+}
+
+function Get-WindowResponsive {
+  param([object]$Window)
+  if ($null -eq $Window) { return $null }
+  return [WindowsComputerUseNative]::IsResponsive([IntPtr]([int64]$Window.nativeWindowHandle))
+}
+
 function Get-TreeResult {
   param([string]$Scope, [int]$MaxDepth, [int]$MaxNodes, [object]$InputObject = $null)
   $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
   $viewMode = Get-ViewMode $InputObject "control"
   $includeOffscreen = [bool](Get-Prop $InputObject "includeOffscreen" $false)
   $detailLevel = Get-DetailLevel $InputObject "compact"
-  $root = Get-ScopeRoot $Scope $InputObject
-  Update-WindowCache $root
-  Update-WindowIdentity $InputObject $root
-  $prefix = if ($Scope -eq "desktop") { "root" } else { "active" }
+  $budgetMs = [int](Get-Prop $InputObject "treeTimeoutMs" 5000)
+  if ($budgetMs -lt 100 -or $budgetMs -gt 30000) { throw "treeTimeoutMs must be between 100 and 30000." }
+  $window = Get-ObservationWindow $InputObject $Scope
+  $responsive = Get-WindowResponsive $window
+  $cache = New-ElementCacheRequest $detailLevel
+  $walker = New-Object System.Windows.Automation.TreeWalker -ArgumentList (Get-ViewCondition $viewMode $includeOffscreen)
+  $traversal = @{watch=$stopwatch; budgetMs=$budgetMs; cache=$cache; walker=$walker; reason=$null; error=$null}
+  $tree = $null
   $count = 0
-  $tree = Convert-Tree -Element $root -Path $prefix -Depth 0 -MaxDepth $MaxDepth -Count ([ref]$count) -MaxNodes $MaxNodes -ViewMode $viewMode -IncludeOffscreen $includeOffscreen -DetailLevel $detailLevel
-  $stopwatch.Stop()
-  return [ordered]@{
-    ok = $true
-    scope = $Scope
-    viewMode = $viewMode
-    includeOffscreen = $includeOffscreen
-    detailLevel = $detailLevel
-    nodeCount = $count
-    truncated = ($count -ge $MaxNodes)
-    durationMs = [int]$stopwatch.ElapsedMilliseconds
-    tree = $tree
+  if ($null -ne $responsive -and -not $responsive) {
+    $traversal.reason = "targetUnresponsive"
+  } else {
+    $root = Get-ScopeRoot $Scope $InputObject
+    Update-WindowCache $root
+    Update-WindowIdentity $InputObject $root
+    try {
+      if (Test-TreeBudget $traversal) {
+        $root = $root.GetUpdatedCache($cache)
+        $prefix = if ($Scope -eq "desktop") { "root" } else { "active" }
+        $tree = Convert-Tree -Element $root -Path $prefix -Depth 0 -MaxDepth $MaxDepth -Count ([ref]$count) -MaxNodes $MaxNodes -ViewMode $viewMode -IncludeOffscreen $includeOffscreen -DetailLevel $detailLevel -Traversal $traversal
+      }
+    } catch {
+      $traversal.reason = "providerError"
+      $traversal.error = $_.Exception.Message
+    }
   }
+  if ($null -ne $traversal.reason -and $traversal.reason -ne "targetUnresponsive") { $responsive = Get-WindowResponsive $window }
+  $stopwatch.Stop()
+  $result = [ordered]@{
+    ok = $true; scope = $Scope; viewMode = $viewMode; includeOffscreen = $includeOffscreen
+    detailLevel = $detailLevel; nodeCount = $count; truncated = ($null -ne $traversal.reason)
+    durationMs = [int]$stopwatch.ElapsedMilliseconds; tree = $tree
+    treeTimeoutMs = $budgetMs; targetResponsive = $responsive
+  }
+  if ($null -ne $traversal.reason) {
+    $result["truncationReason"] = $traversal.reason
+    if ($traversal.reason -ne "maxNodes") {
+      $result["warning"] = "UIA traversal stopped ($($traversal.reason)). Avoid repeated tree calls; check the target window and use screenshot/ocr when appropriate. A single synchronous provider call can exceed treeTimeoutMs."
+    }
+    if ($null -ne $traversal.error) { $result["providerError"] = $traversal.error }
+  }
+  return $result
 }
 
 # ============================================================================
@@ -1749,6 +1849,7 @@ function Invoke-Action {
         powershell = $PSVersionTable.PSVersion.ToString()
         mode = if ($Persistent) { "persistent" } else { "oneshot" }
         uiAutomation = $true
+        treeObservation = @{cached=$true; defaultTreeTimeoutMs=5000; providerCallInterruptible=$false; chromiumHint="Use a scoped control tree; if traversal truncates or times out, check responsiveness before retrying and prefer screenshot/ocr."}
         screenshot = $true
         sendInput = $true
         postmessage = $true
@@ -1769,11 +1870,14 @@ function Invoke-Action {
       $treeResult = Get-TreeResult -Scope $scope -MaxDepth $maxDepth -MaxNodes $maxNodes -InputObject $inputObject
       if ($includeScreenshot) {
         $winEl = $null
-        if ($captureWindow) {
+        if ($captureWindow -and $treeResult.targetResponsive -ne $false) {
           $winEl = Invoke-Safe { Resolve-TargetWindow $inputObject } $null
           if ($null -eq $winEl -and $scope -ne "desktop") { $winEl = Invoke-Safe { Get-ScopeRoot $scope $inputObject } $null }
         }
         $treeResult.screenshot = Capture-Screenshot -WindowElement $winEl -MaxWidth $maxWidth
+        if ($treeResult.screenshot.occludedPossible) {
+          $treeResult["warning"] = (([string]$treeResult.warning + " The window capture may include an occluding window; inspect screenshot.occludedPossible.").Trim())
+        }
       }
       return $treeResult
     }
@@ -1800,6 +1904,7 @@ function Invoke-Action {
         viewMode = Get-ViewMode $inputObject "control"
         includeOffscreen = [bool](Get-Prop $inputObject "includeOffscreen" $false)
         detailLevel = "full"
+        treeTimeoutMs = Get-Prop $inputObject "treeTimeoutMs" 5000
         windowTitle = Get-Prop $inputObject "windowTitle" $null
         processId = Get-Prop $inputObject "processId" $null
         nativeWindowHandle = Get-Prop $inputObject "nativeWindowHandle" $null
@@ -1809,23 +1914,27 @@ function Invoke-Action {
       $results = New-Object System.Collections.Generic.List[object]
       Search-Tree -Node $treeResult.tree -Query $query -ControlType $controlType -MaxResults $maxResults -Results $results
       $out = [ordered]@{ ok = $true; query = $query; results = @($results.ToArray()); scannedNodes = $treeResult.nodeCount; truncated = $treeResult.truncated }
+      foreach ($key in @('durationMs','treeTimeoutMs','targetResponsive','truncationReason','warning','providerError')) {
+        if ($treeResult.Contains($key)) { $out[$key] = $treeResult[$key] }
+      }
       if ($results.Count -eq 0 -and $treeResult.nodeCount -lt 10) {
         $out["hint"] = "UIA tree is sparse (fewer than 10 nodes): this app may not expose an accessibility tree (game / self-drawn Tk / Qt / canvas / RDP). Use the ocr tool to locate text by pixels."
       }
       return $out
     }
     "element_info" {
+      $detailLevel = Get-DetailLevel $inputObject "compact"
       $elementId = Get-Prop $inputObject "elementId" $null
       if ($null -ne $elementId) {
         $el = Resolve-Element $elementId $inputObject
-        return ([ordered]@{ ok = $true; element = (Convert-ElementInfo -Element $el -Id $elementId -Depth 0) })
+        return ([ordered]@{ ok = $true; element = (Convert-ElementInfo -Element $el -Id $elementId -Depth 0 -DetailLevel $detailLevel) })
       } else {
         $x = [int](Get-Prop $inputObject "x" 0)
         $y = [int](Get-Prop $inputObject "y" 0)
         Activate-TargetIfRequested $inputObject
         $point = New-Object System.Windows.Point($x, $y)
         $el = [System.Windows.Automation.AutomationElement]::FromPoint($point)
-        return ([ordered]@{ ok = $true; point = [ordered]@{ x = $x; y = $y }; element = (Convert-ElementInfo -Element $el -Id $null -Depth 0) })
+        return ([ordered]@{ ok = $true; point = [ordered]@{ x = $x; y = $y }; element = (Convert-ElementInfo -Element $el -Id $null -Depth 0 -DetailLevel $detailLevel) })
       }
     }
     "click" {
@@ -2118,11 +2227,22 @@ function Invoke-Action {
     }
     "activate_window" {
       if (-not (Has-WindowTarget $inputObject)) { throw "Provide windowTitle, processId, or nativeWindowHandle." }
+      $window = Get-ObservationWindow $inputObject
+      $responsive = Get-WindowResponsive $window
+      $result = [ordered]@{ok=$true; action="activate_window"; activated=$false; window=$window; targetResponsive=$responsive}
+      if (-not $responsive) {
+        $result["warning"] = "The target window is unresponsive; activation was skipped. Do not retry tree or input calls until the target recovers."
+        return $result
+      }
       $el = Resolve-TargetWindow $inputObject
-      $activated = Set-WindowForeground $el
+      $result.activated = [bool](Set-WindowForeground $el)
       Update-WindowCache $el
       Update-WindowIdentity $inputObject $el
-      return ([ordered]@{ ok = $true; action = "activate_window"; activated = [bool]$activated; window = (Convert-ElementInfo -Element $el -Id "uia:active" -Depth 0) })
+      if (-not $result.activated) {
+        $result["targetResponsive"] = Get-WindowResponsive $window
+        $result["warning"] = if ($result.targetResponsive) { "The window could not be brought to the foreground (Windows foreground lock)." } else { "The target window became unresponsive; avoid repeated activation, tree or input calls." }
+      }
+      return $result
     }
     "cursor_pos" {
       $p = New-Object WindowsComputerUseNative+POINT
