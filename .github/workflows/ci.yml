@@ -35,5 +35,17 @@ jobs:
       # checks use the desktop; input/activation/coordinate tests use fake APIs.
       # UIA cache smokes open/close only owned native/Chromium fixture windows.
       - name: Isolated backend regression suite
+        id: regression
         run: npm test
         timeout-minutes: 15
+
+      - name: Preserve regression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-${{ matrix.powershell }}
+          path: |
+            ${{ steps.regression.outputs.artifactRoot }}/results.json
+            ${{ steps.regression.outputs.artifactRoot }}/*/*.log
+            ${{ steps.regression.outputs.artifactRoot }}/*/results.json
+          if-no-files-found: warn

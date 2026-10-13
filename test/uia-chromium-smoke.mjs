@@ -27,7 +27,7 @@ async function call(client,action,args){
   assert.equal(r.ok,true);results.push({action,args,result:r,wallMs:Math.round(performance.now()-start)});return r;
 }
 try{
-  for(let i=0;i<100&&!ready;i++){assert.equal(fixture.exitCode,null,stderr);await delay(100);}
+  for(let i=0;i<300&&!ready;i++){assert.equal(fixture.exitCode,null,stderr);await delay(100);}
   assert.ok(ready,'Chromium startup failed: '+stderr);
   for(const powershell of (process.env.WINDOWS_CU_POWERSHELL?[process.env.WINDOWS_CU_POWERSHELL]:['powershell.exe','pwsh'])){
     const client=await makeClient(path.join(import.meta.dirname,'..'),powershell,'cached');

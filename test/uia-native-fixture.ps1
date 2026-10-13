@@ -2,6 +2,8 @@
 param([string]$ArtifactDirectory)
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.Encoding]::UTF8
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility') -Force
+[Console]::WriteLine('{"phase":"utility-loaded"}')
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 Add-Type -ReferencedAssemblies System.Windows.Forms -TypeDefinition @'
@@ -9,6 +11,7 @@ public class InactiveFixtureForm : System.Windows.Forms.Form {
   protected override bool ShowWithoutActivation {get {return true;}}
 }
 '@
+[Console]::WriteLine('{"phase":"form-type-compiled"}')
 $form=New-Object InactiveFixtureForm
 $form.Text='WCU issue18 isolated native fixture'
 $form.Width=500;$form.Height=300

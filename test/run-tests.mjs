@@ -1,7 +1,7 @@
 // Each suite gets a separate process and TEMP/TMP directory. No physical input.
 // Live UIA suites open and close only dedicated fixture windows.
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, appendFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ if (process.platform !== 'win32') throw new Error('These backend regression test
 const checkout = fileURLToPath(new URL('../', import.meta.url));
 const powershell = process.env.WINDOWS_CU_POWERSHELL || 'powershell.exe';
 const root = await mkdtemp(path.join(os.tmpdir(), 'wcu-isolated-tests-'));
+if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `artifactRoot=${root}\n`);
 const suites = [
   ['source-encoding', process.execPath, ['test/source-encoding.mjs']],
   ['selftest', process.execPath, ['mcp/server.mjs', '--self-test']],
@@ -43,7 +44,7 @@ for (const [name, command, args] of suites) {
   await writeFile(path.join(temp, 'stdout.log'), result.stdout || '');
   await writeFile(path.join(temp, 'stderr.log'), (result.stderr || '') + (result.error ? '\n' + result.error.message : ''));
   // Keep stage timings visible in successful CI jobs as well as failures.
-  if (name === 'bundle-startup' && result.stdout) console.log(result.stdout.trimEnd());
+  if (['bundle-startup','uia-native-smoke','uia-chromium-smoke'].includes(name) && result.stdout) console.log(result.stdout.trimEnd());
   const passed = result.status === 0 && !result.error;
   results.push({ name, passed, exitCode: result.status, durationMs: Date.now() - start });
   await writeFile(path.join(root, 'results.json'), JSON.stringify({ powershell, node: process.version, results }, null, 2) + '\n');

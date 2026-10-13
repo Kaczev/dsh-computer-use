@@ -13,7 +13,10 @@ const client=new McpTestClient(process.execPath,[path.join(import.meta.dirname,'
 const results=[];
 async function call(action,args){const start=performance.now();const r=await client.call('windows_computer_use_'+action,args);assert.ok(!r.isError,JSON.stringify(r));const data=JSON.parse(r.content[0].text);results.push({action,args,result:data,wallMs:Math.round(performance.now()-start)});return data;}
 try{
-  await client.init();for(let i=0;i<50&&!state.ready;i++){assert.equal(fixture.exitCode,null,stderr);await delay(100);}assert.ok(state.ready,stderr);
+  const started=performance.now();await client.init();
+  for(let i=0;i<300&&!state.ready;i++){assert.equal(fixture.exitCode,null,stderr);await delay(100);}
+  assert.ok(state.ready,JSON.stringify({state,stderr,exitCode:fixture.exitCode,waitedMs:Math.round(performance.now()-started)}));
+  console.log('NATIVE_STARTUP '+JSON.stringify({durationMs:Math.round(performance.now()-started),state}));
   const target={nativeWindowHandle:state.hwnd};
   const tree=await call('accessibility_tree',{...target,detailLevel:'full',maxDepth:5});
   assert.equal(tree.targetResponsive,true);assert.ok(tree.nodeCount>=3,JSON.stringify(tree));
