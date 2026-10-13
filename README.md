@@ -57,6 +57,8 @@ DSH Desktop 的 `process.execPath` 指向 Electron 可执行程序。自 0.2.4 �
 | 动作 | `click` · `double_click` · `move` · `drag` · `scroll` · `type_text`（clipboard/sendinput/background）· `keypress` · `focus` · `invoke` · `set_value` |
 | 窗口 | `activate_window` · `move_window` · `close_window`（WM_CLOSE，应用可弹保存框否决）· `wait_for` · `wait` |
 
+UIA 树采用逐节点缓存与惰性遍历，默认时间预算为 5000 ms；超限返回部分结果及原因。`element_info` 默认 `detailLevel: "compact"`，需要 value/patterns 时传 `"full"`。窗口激活失败返回 warning 和原生窗口信息。参数与 Chromium/CEF 降级建议见 [工具文档](docs/wiki/mcp-tools.md)。
+
 所有工具都支持可选窗口定位（`windowTitle` 子串 / `processId` / `nativeWindowHandle`）+ `activate: true`；不指定 = 当前前台窗口。`activate` 在影响结果的路径上都会生效（输入类、坐标点击/滚动、`ocr` 截屏、`move_window` 等）；`close_window` 忽略它（WM_CLOSE 后台即可），`activate_window` 恒定激活。各工具的确切语义见 `docs/wiki/mcp-tools.md`。
 
 ## 架构

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.6 — 2026-10-13
+
+- UIA 树遍历改用逐节点 CacheRequest 与惰性 TreeWalker，属性、RuntimeId、full 模式的 value/patterns 均从缓存读取；不再预先枚举整棵子树或所有兄弟节点，保留 maxNodes/maxDepth 限制。
+- snapshot/accessibility_tree/find 新增 treeTimeoutMs（默认 5000 ms）和部分结果诊断；原生 WM_NULL 探测发现目标无响应时，在进入 UIA 前停止。单次同步 Provider 调用仍可能超过时间预算；MCP worker 超时提示调用方检查目标，避免立即重复遍历。
+- activate_window 激活失败附 warning 与 targetResponsive，返回可用的 Win32 窗口元数据；目标无响应时跳过激活。element_info 支持 detailLevel，默认 compact，可显式选择 full。snapshot 补齐遮挡警告。
+- Added PowerShell 5.1/7 regressions for cached metadata, bounded lazy traversal, partial deadlines, provider failures, native activation diagnostics and element_info detail levels. CI also verifies real disposable WinForms and Electron/Chromium providers, without physical input.
+- Cached observations reduce per-node live property/pattern reads. The budget is cooperative between provider calls, not a guarantee that an individual CEF provider cannot block. NetEase Cloud Music 3.1.41 on the reporter's Windows build has not been reproduced here.
+- 感谢 / Thanks to [@ERlzero](https://github.com/ERlzero) for the report and follow-up script in [#18](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues/18).
+
 ## 0.2.5 — 2026-10-09
 
 - 修复 OCR `query` 无法匹配按字符分词的 CJK 文本：忽略大小写和空白，在实际 OCR 词序列中定位命中范围，并在这些词框的联合矩形中心回查 UIA 控件。

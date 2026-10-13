@@ -104,6 +104,13 @@ const treeDetailProperties = {
   }
 };
 
+const treeBudgetProperties = {
+  treeTimeoutMs: {
+    type: "integer", minimum: 100, maximum: 30000, default: 5000,
+    description: "Traversal time budget checked between synchronous UIA provider calls. Returns a partial tree with truncationReason when exceeded; an individual provider call may exceed this budget."
+  }
+};
+
 const tools = [
   {
     name: "windows_computer_use_health",
@@ -121,6 +128,7 @@ const tools = [
         ...windowTargetProperties,
         ...treeViewProperties,
         ...treeDetailProperties,
+        ...treeBudgetProperties,
         includeScreenshot: { type: "boolean", default: true },
         captureWindow: {
           type: "boolean",
@@ -150,6 +158,7 @@ const tools = [
         ...windowTargetProperties,
         ...treeViewProperties,
         ...treeDetailProperties,
+        ...treeBudgetProperties,
         maxDepth: { type: "integer", minimum: 0, maximum: 12, default: 6 },
         maxNodes: { type: "integer", minimum: 1, maximum: 3000, default: 500 }
       }
@@ -179,6 +188,7 @@ const tools = [
         scope: { type: "string", enum: ["active_window", "desktop"], default: "active_window" },
         ...windowTargetProperties,
         ...treeViewProperties,
+        ...treeBudgetProperties,
         controlType: { type: "string" },
         maxDepth: { type: "integer", minimum: 0, maximum: 12, default: 8 },
         maxNodes: { type: "integer", minimum: 1, maximum: 5000, default: 1200 },
@@ -196,6 +206,7 @@ const tools = [
         elementId: { type: "string" },
         ...windowTargetProperties,
         ...treeViewProperties,
+        ...treeDetailProperties,
         x: { type: "integer" },
         y: { type: "integer" }
       }
@@ -612,7 +623,9 @@ function runBackend(action, args = {}, timeoutMs = 30000, request) {
     const timer = setTimeout(() => {
       if (!backendWaiters.has(id)) return;
       backendWaiters.delete(id);
-      reject(new Error(`Windows Computer Use backend timed out after ${timeoutMs}ms during ${action}`));
+      const targetHint = ['snapshot', 'tree', 'find', 'element_info', 'type_text', 'focus', 'invoke', 'set_value', 'activate_window'].includes(action)
+        ? '. Target responsiveness is unknown; the target may also be unresponsive. Avoid immediately retrying tree/input calls; check the window with list_windows and prefer screenshot/ocr after it recovers.' : '';
+      reject(new Error(`Windows Computer Use backend timed out after ${timeoutMs}ms during ${action}${targetHint}`));
       // The wedged call may have stalled the backend loop: kill it and
       // respawn lazily on the next call.
       killBackend(new Error("Backend stopped after another action timed out"), proc);

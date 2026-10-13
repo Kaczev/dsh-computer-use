@@ -42,7 +42,14 @@ Tree-reading tools accept:
 
 - `viewMode`: `control`, `content`, or `raw`; default is `control`.
 - `includeOffscreen`: include elements reported by UIA as offscreen; default is `false`.
-- `detailLevel`: `compact` or `full` for `snapshot` and `accessibility_tree`; default is `compact`.
+- `detailLevel`: `compact` or `full` for `snapshot`, `accessibility_tree`, and `element_info`; default is `compact`. `find` retains full metadata and value matching.
+- `treeTimeoutMs`: 100–30000 ms for `snapshot`, `accessibility_tree`, and `find`; default is 5000 ms.
+
+Trees batch properties (including RuntimeId) and, for full metadata, patterns and value into an element-scoped UIA `CacheRequest`. A filtered `TreeWalker` fetches one child/sibling at a time, preserving `maxDepth` and `maxNodes` without first materializing all descendants. Legacy path ids use the same filtered view.
+
+The time budget is checked between synchronous provider calls. Partial results carry `truncated=true`, `truncationReason` (`maxNodes`, `timeBudget`, `providerError`, or `targetUnresponsive`), and applicable `warning`/`providerError` fields. `durationMs` and these diagnostics also propagate through `find`. `targetResponsive` comes from a bounded Win32 `WM_NULL` probe of the target (null for desktop scope). An already unresponsive target is skipped before UIA resolution. A single blocked provider call can exceed the budget; the existing MCP worker timeout remains the last fallback and explains that target responsiveness is unknown. Do not immediately repeat a timed-out traversal. Inspect the window, then use a screenshot or OCR once it responds.
+
+`activate_window` returns native window metadata (`source=win32`, HWND/PID id) and `targetResponsive`. A refused activation carries a `warning`; an unresponsive target skips activation. Use `element_info(detailLevel="full")` when UIA-specific metadata is needed. `snapshot` also warns when its captured window image may contain an occluding window.
 
 Use `control` for normal actions. Use `content` when reading visible text/content. Use `raw` with `includeOffscreen=true` only when a provider hides useful nodes from the control tree or when debugging a sparse/custom app.
 
