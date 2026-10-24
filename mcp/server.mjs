@@ -545,9 +545,22 @@ const allowedTools = new Set((configuredSelection ?? TOOL_NAMES).map(name=>prefi
 if (toolMode === 'lazy' && !allowedTools.has(discoveryName)) throw new Error('Lazy startup requires tools in WCU_ENABLED_TOOLS');
 const initialNames = toolMode === 'lazy' ? [discoveryName] : configuredSelection ? configuredSelection.map(name=>prefix+name) : [...(toolMode === 'lite' ? liteNames : tools.map(tool => tool.name.slice(prefix.length))).map(name => prefix + name),discoveryName];
 const enabledTools = new Set(initialNames);
+// Models infer what a server can do from the names of its tools. A Lazy startup
+// advertises the management entry alone, so no capability name is left to infer
+// from. MCP instructions are the channel for that statement: DSH publishes them
+// as a system-prompt section attributed to this server.
+const capabilityInstructions = 'Windows Computer Use reads and operates real Windows applications on this machine: it lists windows, reads UI Automation trees, takes screenshots, recognizes on-screen text with OCR, clicks, types, sends keys and manages windows. The current tool-loading preset starts without those desktop tools, so call windows_computer_use_tools with operation "enable" and the names a task needs (or ["*"] for all allowed tools) before using them; "describe" returns one tool\'s full arguments. Prefer UI Automation elements over screen coordinates, and observe again to verify that an action took effect.';
+// A Custom checklist that allows no desktop tool must not claim the capability:
+// enabling one is refused, and saying otherwise contradicts the user's setting.
+const managementOnly = initialNames.length === 1 && initialNames[0] === discoveryName
+  && [...allowedTools].some(name => name !== discoveryName);
+const serverInstructions = managementOnly ? capabilityInstructions : undefined;
 const discoveryTool = {
   name: discoveryName,
-  description: (toolMode === 'lazy' ? 'Lazy startup: enable tools before desktop use. ' : '') + 'List capabilities; describe reads one full schema; enable/disable accepts names or ["*"] for all allowed desktop tools; reset restores startup selection.',
+  // Desktop tools carry their own capability names. A management-only startup
+  // advertises this entry alone, so the name "tools" no longer tells the model
+  // that the machine can be read and operated — state the capability first.
+  description: (toolMode === 'lazy' ? 'Lazy startup: ' : '') + (managementOnly ? 'reads and operates real Windows apps (UI Automation, screenshots, OCR, input, windows); enable tools before desktop use. ' : '') + 'List capabilities; describe reads one full schema; enable/disable accepts names or ["*"] for all allowed desktop tools; reset restores startup selection.',
   inputSchema: { type: 'object', additionalProperties: false, properties: {
     operation: { type: 'string', enum: ['list','describe','enable','disable','reset'], default: 'list' },
     names: { type: 'array', maxItems: 23, items: { type: 'string' } }
@@ -974,7 +987,8 @@ async function handleRequest(message) {
         serverInfo: {
           name: "windows-computer-use",
           version: SERVER_VERSION
-        }
+        },
+        ...(serverInstructions === undefined ? {} : { instructions: serverInstructions })
       }
     };
   }

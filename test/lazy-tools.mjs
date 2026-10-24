@@ -19,8 +19,23 @@ for(const [preset,selection] of [['lazy',TOOL_NAMES],['lazy',null],['lite',enabl
   const client=new McpTestClient(process.execPath,[fileURLToPath(new URL('../mcp/server.mjs',import.meta.url))],{env});
   const manage=args=>client.call(prefix+'tools',args),list=async()=>(await client.request('tools/list')).tools;
   try{
-    assert.equal((await client.init()).capabilities.tools.listChanged,true);
+    const init=await client.init();
+    assert.equal(init.capabilities.tools.listChanged,true);
     const initial=await list(),allowed=(selection||TOOL_NAMES).filter(n=>n!=='tools');
+    // A management-only startup advertises no tool whose name states a desktop
+    // capability, so the server must state it in instructions instead. A Custom
+    // checklist that allows no desktop tool is excluded: enabling one is refused,
+    // so claiming the capability would contradict the user's setting.
+    const managementOnly=initial.length===1&&initial[0].name===prefix+'tools'&&allowed.length>0;
+    assert.equal(Object.hasOwn(init,'instructions'),managementOnly,'Instructions appear exactly when the startup set is management only and a desktop tool is allowed');
+    if(managementOnly){
+      assert.match(init.instructions,/screenshots/i);
+      assert.match(init.instructions,/OCR/i);
+      assert.match(init.instructions,/enable/);
+    }
+    if(initial.length===1&&initial[0].name===prefix+'tools'&&!allowed.length){
+      assert.doesNotMatch(initial[0].description,/reads and operates real Windows apps/,'A no-desktop-tool selection must not advertise the capability');
+    }
     if(preset==='lazy'){
       assert.deepEqual(initial.map(t=>t.name),[prefix+'tools']);
       assert.match(initial[0].description,/enable tools before desktop use/);

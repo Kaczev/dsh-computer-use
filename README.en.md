@@ -16,6 +16,8 @@ Your [**Star ⭐ ↗**](https://github.com/Yu-tao-Li/dsh-computer-use-win) keeps
 
 **New in 0.5.0: Lazy startup.** Select Lazy in Settings → Computer Use to start with one management tool and load desktop tools on demand. All tools remain allowed, and All remains the default preset. See [tool loading](docs/tool-context.md).
 
+When the startup set is the management entry alone and at least one desktop tool is allowed — which is what Lazy startup does — the server returns an MCP handshake note that this machine can be read and operated and that tools must be enabled first. With no desktop tool name advertised at startup, the model still learns the capability exists.
+
 Give a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) agent access to real Windows apps: find controls, inspect screenshots, read visible text, click, type and manage windows.
 
 **23 desktop tools + 1 management entry · Visible control status · Esc stops the current turn · Chinese and English settings**
@@ -251,6 +253,8 @@ MIT licensed. Derived from [cgissing/windows-computer-use](https://github.com/cg
 ## 简体中文
 
 **0.5.0 新增懒启动**：在“设置 → Computer Use”选择“懒启动”，启动只加载 1 项管理工具，桌面工具按需加载，仍允许全部工具。现有默认方案保持“全部”。详见[工具加载](docs/tool-context.md)。
+
+启动集合只剩管理入口、且至少允许一项桌面工具时（懒启动即属此类），服务随 MCP 握手返回一段说明：这台电脑可被读取和操作，使用前需先 `enable`。启动时一个桌面工具名都没有，模型也能据此知道该能力存在。
 
 让 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 agent 读取并操作真实 Windows 应用：找控件、看截图、识别文字、点击、输入和管理窗口。
 
