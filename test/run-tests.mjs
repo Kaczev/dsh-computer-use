@@ -34,12 +34,22 @@ const suites = [
   ['window-capture-contract', powershell, ['-NoProfile', '-File', 'test/window-capture-contract.ps1']],
   ['uia-cache-contract', powershell, ['-NoProfile', '-File', 'test/uia-cache-contract.ps1']],
   ['uia-native-smoke', process.execPath, ['test/uia-native-smoke.mjs', path.join(root, 'uia-native-smoke')]],
+  ['quiet-native-mcp', process.execPath, ['test/quiet-native-mcp.mjs']],
   ['uia-chromium-smoke', process.execPath, ['test/uia-chromium-smoke.mjs', path.join(root, 'uia-chromium-smoke')]],
+  ['uia-chromium-lazy-smoke', process.execPath, ['test/uia-chromium-lazy-smoke.mjs', path.join(root, 'uia-chromium-lazy-smoke')]],
   ['sparse-canvas-smoke', process.execPath, ['test/sparse-canvas-smoke.mjs', path.join(root, 'sparse-canvas-smoke')]],
+  ['browser-namespace', process.execPath, ['test/browser-namespace.mjs']],
+  ['browser-transport', process.execPath, ['test/browser-transport.mjs']],
+  ['browser-lane', process.execPath, ['test/browser-lane.mjs']],
+  ['browser-visible', process.execPath, ['test/browser-visible.mjs']],
+  ['browser-reconnect', process.execPath, ['test/browser-reconnect.mjs']],
+  ['browser-signin', process.execPath, ['test/browser-signin.mjs']],
+  ['browser-profile-lifecycle', process.execPath, ['test/browser-profile-lifecycle.mjs', path.join(root, 'browser-profile-lifecycle')]],
   ['ocr-query-contract', powershell, ['-NoProfile', '-File', 'test/ocr-query-contract.ps1']],
   ['point-arguments', powershell, ['-NoProfile', '-File', 'test/point-arguments.ps1']],
   ['native-input-errors', powershell, ['-NoProfile', '-File', 'test/native-input-errors.ps1']],
-  ['input-upgrade-contract', powershell, ['-NoProfile', '-File', 'test/input-upgrade-contract.ps1']]
+  ['input-upgrade-contract', powershell, ['-NoProfile', '-File', 'test/input-upgrade-contract.ps1']],
+  ['less-takeover-contract', powershell, ['-NoProfile', '-File', 'test/less-takeover-contract.ps1']]
 ];
 const results = [];
 console.log(`Isolated test artifacts: ${root}`);
@@ -49,7 +59,7 @@ for (const [name, command, args] of suites) {
   const start = Date.now();
   const result = spawnSync(command, args, {
     cwd: checkout,
-    env: { ...process.env, TEMP: temp, TMP: temp, NODE_ENV: 'test', WCU_TEST_NO_TAKEOVER: '1', WCU_INDICATOR: '0', WINDOWS_CU_POWERSHELL: powershell },
+    env: { ...process.env, TEMP: temp, TMP: temp, NODE_ENV: 'test', WCU_BROWSER_HEADLESS: '1', WCU_TEST_NO_TAKEOVER: '1', WCU_INDICATOR: '0', WINDOWS_CU_POWERSHELL: powershell },
     windowsHide: true,
     encoding: 'utf8',
     timeout: 180000,
@@ -58,7 +68,7 @@ for (const [name, command, args] of suites) {
   await writeFile(path.join(temp, 'stdout.log'), result.stdout || '');
   await writeFile(path.join(temp, 'stderr.log'), (result.stderr || '') + (result.error ? '\n' + result.error.message : ''));
   // Keep stage timings visible in successful CI jobs as well as failures.
-  if (['bundle-startup','uia-native-smoke','uia-chromium-smoke'].includes(name) && result.stdout) console.log(result.stdout.trimEnd());
+  if (['bundle-startup','uia-native-smoke','uia-chromium-smoke','uia-chromium-lazy-smoke','browser-lane'].includes(name) && result.stdout) console.log(result.stdout.trimEnd());
   const passed = result.status === 0 && !result.error;
   results.push({ name, passed, exitCode: result.status, durationMs: Date.now() - start });
   await writeFile(path.join(root, 'results.json'), JSON.stringify({ powershell, node: process.version, results }, null, 2) + '\n');
@@ -68,6 +78,6 @@ for (const [name, command, args] of suites) {
     if (result.error) console.error(result.error.message);
     console.error(`Diagnostics retained in ${temp}`);
     process.exitCode = 1;
-    break;
+    // Continue independent suites so one failure does not hide later results.
   }
 }

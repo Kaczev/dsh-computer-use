@@ -32,11 +32,13 @@ Windows 上比"截图像素"更可靠的是 **UI Automation** 树：每个控件
 ### 3. 动作：三条路径
 | 路径 | 用什么 | 何时用 |
 |---|---|---|
-| 语义 | UIA patterns：`Invoke`/`Toggle`/`SelectionItem`/`ExpandCollapse`/`Value` | 优先！不碰鼠标、更稳 |
-| 前台 | `SetCursorPos` + SendInput 状态事件；剪贴板写入 + `Ctrl+V`；`SendKeys` 键组合 | 常规操作 |
+| 后台消息 | `BM_CLICK`（Win32/WinForms 按钮、复选框）、`EM_REPLACESEL`（输入框）、`WM_VSCROLL`（自带滚动条的控件），发进控件自己的消息队列 | 最优先：不动鼠标、不切前台、不用剪贴板 |
+| 语义 | UIA patterns：`Invoke`/`Toggle`/`SelectionItem`/`ExpandCollapse`/`Value`/`Scroll` | 其次。托管 Win32 代理和 Chromium 在调用里会自己切前台，调用后立刻还回去 |
+| 前台 | `SetCursorPos` + SendInput 状态事件；剪贴板写入 + `Ctrl+V`；`SendKeys` 键组合 | 只借用前台：先检查落点，用完还鼠标和前台 |
 | 后台 | PostMessage（鼠标消息 / WM_CHAR）直进目标窗口消息队列 | 不抢前台；投递未验证（诚实 `verified:false`） |
 
-`type_text` 三种 `method`：`clipboard`（CJK 最可靠，自动还原剪贴板）/
+`type_text` 四种 `method`：`auto`（默认；焦点在 Win32 输入框时用 EM_REPLACESEL 在后台写入，否则借用前台粘贴）/
+`clipboard`（CJK 最可靠，自动还原剪贴板，粘贴内容不进剪贴板历史）/
 `sendinput`（KEYEVENTF_UNICODE 逐字符，不碰剪贴板）/ `background`（WM_CHAR，不碰前台）。
 `keypress` 支持 `["ctrl","shift","s"]` 这类键组合（Win 键黑名单拦截，SendKeys 限制）。
 
@@ -178,3 +180,77 @@ Issue #24 原版 tools/list 序列化为 43,495 字符。保留全部执行定�
 修复 #29 的包入口发现、客户端依赖和现代 Config/volatile 表单路径，使用官方 bridge；真实 Desktop 已验证独立入口、保存和重启持久化。实现 #28 的可见接管反馈，停止采用物理 Esc／录制快捷键和显式恢复，普通输入不自动退出。原生透明层保留系统光标，默认允许远程捕获，并按活动显示器变化重建。实际三块 2560×1440 屏幕的窗口边界和采集通过，用户在 UU 虚拟屏幕中确认提示条与鼠标标识均可见。
 
 Windows 回归由专用输入夹具和测试事件验证停止、取消与收尾，不向用户桌面发送测试点击或按键。动态显示器新增、分辨率变化、移除和重连通过测试入口驱动真实重建逻辑；实际远程验证覆盖现有三屏布局。完整发布验证与 CI 结果见 v0.4.2 Release。
+
+## 2026-10-25：Issue #50 Chromium 网页的无障碍树
+
+结论：Electron 窗口读不到网页控件，有两个原因，修好一个还不够。第一，Chromium 要等 UIA 客户端读取页面根节点的属性，才会构建网页的无障碍树。第二，网页放在六层以上没有名字的 views 布局 Pane 下面，默认深度根本走不到。
+
+测量环境是 Electron 44.0.0（Chromium 152）、Windows 11 26200 和 PowerShell 5.1，夹具不强制打开无障碍。
+
+- 冷窗口在 control 视图里只有窗口外框和 views 布局层，共 14–15 个节点。raw 视图里，`Chrome_RenderWidgetHostHWND`（名字是 Chrome Legacy Window）下面挂着一个空的 Document，也就是页面根节点；control 视图把这个空节点过滤掉了，所以普通遍历一般碰不到它。
+- 真正起作用的是读取页面根节点的属性，比如 ControlType。只导航（RawViewWalker.GetFirstChild）不会触发，只读 renderer 自身那个 Pane 的属性也不会。issue 里的 `WM_GETOBJECT(UiaRootObjectId)` 就是 `FromHandle` 本来会发的消息，并不是关键。`FindAll` 能触发，是因为托管 `FindAll` 默认按 control 视图过滤，要读每个节点的 IsControlElement；但它没有上限，大页面上一次调用可能很长，而且第一次总返回 0。
+- 读取之后，页面树 50–450 ms 到达：普通页面约 50–150 ms，约 6000 个节点的页面约 300–430 ms。旧的根节点随即被替换，从之前拿到的元素继续导航会一直是空的，所以每次探测都要重新 `FromHandle`。
+- 页面加载之前没有 renderer 子窗口；加载后第一次探测约 0.1 秒就绪。刷新页面会换一个新的 renderer HWND，但无障碍模式保留，新窗口一探测就有内容。用 `sendInputEvent` 连续 51 秒只发输入、不调用无障碍 API，页面树没有被关掉。真实系统输入没有测，所以每次观察仍会重新探测。
+- 不预热、只做深遍历时，结果不确定：4 次里 2 次在 0.3 秒内出现内容，1 次 4 秒内都没有，还有 1 次遍历卡住约 73 秒之后才出现。这正是改成显式预热的原因。
+- 深度：control 视图里页面根节点在第 8 层（Window → RootView → NonClientView → WinFrameView → ClientView → View → View → View → Document），按钮在第 10 层以下。所以 main 即使用 `--force-renderer-accessibility` 强制打开无障碍，默认的 tree 也只有 9 个节点，find 找不到按钮，snapshot 只有 7 个节点；只有手动传 `maxDepth: 12` 才有 78 个节点。CI 原来的 Chromium 冒烟测试全部显式传 12，所以一直没测出来。
+
+实现方式：做窗口范围的观察之前，对每个可见的 renderer 子窗口（最多 8 个）读一次页面根节点的属性，再等网页树出来。每次调用最多等 1.5 秒，并且不超过 `treeTimeoutMs` 的一半；状态按 renderer HWND 记录，一直空着的 renderer 在 30 秒内的后续观察里继续尝试，之后不再等待。renderer 无响应（WebView2、CEF 的 renderer 可能属于别的进程）时不进入 UIA；读取被拒绝（比如提权窗口被 UIPI 拦截）时也不等待。在窗口范围的树里，没有名字的 Chrome Pane 不计入 `maxDepth`，最多额外 16 层；返回的 `depth` 仍是实际层级。桌面范围既不预热，也不改深度计法，避免某个网页占满整个桌面概览的节点预算。
+
+修复后的实测：
+- 同一个夹具，第一次按默认参数调用 `accessibility_tree` 就返回 78 个节点，预热等了 71 ms；find 返回 UIA 结果，snapshot 52 个节点。
+- ChatGPT/Codex 桌面版（Chromium 156，页面树事先已经打开）：默认 tree 从 13 个节点（只有标题栏按钮）变成 67 个，find 按钮从 3 个变成 31 个。
+- 用独立配置目录启动的 Edge 155 和 Google Chrome 155：第一次观察分别预热 90 ms 和 100 ms，读到网页按钮。Chrome 的顶层窗口下有 3 个 renderer 子窗口，其中 2 个隐藏，所以只取可见的这一点是必要的。issue 说 Chrome 预热后仍然没有内容，在这里没有复现。
+- WebView2：用 Office 自带的 WebView2 SDK 搭了一个 WinForms 宿主（运行时 155）。renderer 属于另一个进程 msedgewebview2，页面根节点在第 11 层。main 两次读取都只有 16 个节点；修复后第一次观察预热 81 ms，读到网页控件。
+- CEF 走同一条代码路径，但本机没有可见的 CEF 窗口，没有实测。issue 提到的透明点击穿透窗口，renderer 的树不会挂进父窗口，这次也没有处理。
+
+## 2026-10-25：少接管（#45 第 2 项）
+
+目标是同一个桌面里少打扰用户：能在后台完成的步骤不动鼠标、不切前台、不用剪贴板；必须用真实鼠标键盘时只借用前台，用完还回去。设计和更早的探针记录在 #45 的进度笔记里，下面是这一轮在本机（Windows 11 26200、PowerShell 5.1、WinForms 与 Electron 44 夹具）核实过的事实。
+
+- .NET 托管 Win32 代理（PS 5.1 里 Win32/WinForms 控件靠它们出现在 UIA 树里）的 Invoke、Toggle、SetValue、Expand、Collapse、Select、Scroll、SetFocus 都会把窗口切到前台；ListView 项的 Invoke 是一次真实的鼠标双击。Chromium 的 UIA 实现也一样，只有 ScrollIntoView 不切前台。所以 UIA 模式调用包了一层守卫：调用后前台或鼠标被改了就还回去。
+- BM_CLICK、EM_REPLACESEL、WM_VSCROLL 发给 WinForms 控件，前台不变，鼠标不动；跨进程的 EM_REPLACESEL 能写入，TextChanged 照常触发。
+- 还原前台：本线程用 AttachThreadInput 加入前台线程的输入，再 SetForegroundWindow，每次都成功，不需要按 Alt。下拉框展开后立刻还原前台，下拉列表会被关掉，所以目标线程处于菜单模式（GetGUIThreadInfo 的 GUI_INMENUMODE 等标志），或者出现了动作之前没有的弹出窗口时，不还原。
+- 每个线程有自己的焦点：窗口在后台时，GetGUIThreadInfo 仍能读到它线程里的焦点窗口；从没激活过的窗口，焦点是 0。WinForms 在自己的线程里调用 Focus() 会设好线程焦点，窗口不会到前台。后台打字就靠这一点找到要写入的输入框。
+- 跨进程发 EM_GETSEL（wParam、lParam 都是 0）给 WinForms 输入框，只返回了选区起点：光标在第 13 个字符后时返回 13，不是打包的起点和终点。后台打字的核对因此不读选区，改为比较文本长度，或者读回的值里包含刚写入的文字。
+- WindowFromPoint 会跳过分层且鼠标穿透的窗口（DSH 自己的提示层），所以落点检查不受提示层影响。
+- 读屏、读控件树和后台元素操作走安静租约，不启动接管助手。需要真实输入的一步，后端在发出任何输入之前报 WCU_NEEDS_INPUT，服务再带提示重跑这一步。宿主按同一个 isQuietCall 判断这一轮要不要亮提示，所以一轮里只有读屏和后台操作时不亮。
+
+测试：less-takeover-contract 用假 API 覆盖借用、归还和各种保留前台的情况；uia-native-smoke 在第三块屏的 WinForms 夹具上验证 BM_CLICK、EM_REPLACESEL、后台 type_text、WM_VSCROLL 和跟随观察，夹具全程不到前台。带上宿主轮次标识的直接探针确认：同一轮里不指定窗口的 wait_for 和控件树读取跟着 DSH 刚操作的窗口，下一轮回到前台窗口。
+
+上一个会话里 uia-native-smoke 报过几次“找不到目标窗口”，后来复现不了。查得到原因的几次，都是重跑时复用了同一个测试目录：上一轮在 finally 里写下的 quit 命令还在，夹具一显示就自己关了。现在测试开始前先删掉这个文件。最早那次失败的输出没有留下，原因没有确认；之后的多次运行（包括重新编译原生 DLL 后的第一次）都通过。
+
+## 2026-10-25：浏览器选择与使用登录状态
+
+用户定下：浏览器操控用哪个浏览器由用户选，默认跟随 Windows 的默认浏览器；可以打开“使用我的登录状态（cookies）”，默认关闭；打开时设置页要说清楚去浏览器里开什么、有什么风险。下面是做这一项时实测到的事实，都用无头的临时配置测，没碰用户自己的浏览器。
+
+- 默认浏览器：Windows 11（26200）把当前选择放在 `HKCU\…\UrlAssociations\https\UserChoiceLatest\ProgId` 的 `ProgId` 值里，`UserChoiceLatest` 本身只有 `Hash`；旧的 `UserChoice\ProgId` 也还在。这台机器两处都是 `MSEdgeHTM`。插件先读前者，再读后者，`reg.exe query … /s` 一次读完，约 60 毫秒。
+- Chrome 155 和 Edge 156 的 `chrome://inspect/#remote-debugging`、`edge://inspect/#remote-debugging` 都有 “Allow remote debugging for this browser instance”（复选框 `#remote-debugging-enabled`），说明文字是：打开后外部程序可以申请完全控制浏览器，包括读取保存的数据、Cookie 和网站数据。
+- Edge 156 上勾选后写入 `Local State` 的 `devtools.remote_debugging.user-enabled: true`。不带任何调试参数重启，Edge 自己在 127.0.0.1:9222 开调试端口并写 `DevToolsActivePort`，所以只需勾一次。
+- 客户端连这个端口时，WebSocket 握手 8 秒没有回应。无头模式没人能点允许，和 Google 文档说的“每次连接都要用户确认”一致；允许提示本身没测。
+- Edge 做专用浏览器时，标签页在 `Target.createBrowserContext` 建的隔离上下文里，窗口工具栏不显示账户头像，蓝色窗口框和标签图标正常，窗口不抢前台。临时配置在磁盘上仍被 Edge 自动登录了微软账户，浏览器关闭后随配置一起删除。
+
+做法：
+- `browserApp` 决定专用浏览器用哪个程序；默认浏览器不是 Edge 或 Chrome 时，按 Chrome、Edge 的顺序找。
+- `browserSignIn` 打开后，`new-tab` 才去连用户正在用的那个浏览器（只看稳定版的用户数据目录），在它的默认上下文里后台开标签页。只有这些标签页加 DSH 图标和小箭头，用户原来的标签页不注入任何脚本。连接最多等 30 秒，等不到或被拒绝时，标签页改在专用浏览器里打开，结果带 `signedIn: false` 和 `signInNote`，说明原因和开启方法；之后一分钟内不再重试，直接退回。
+- 连上后不主动断开，免得每个任务都要用户再允许一次；代价是连接期间浏览器一直显示受自动测试软件控制的提示。
+- 关闭时插件完全不连用户的浏览器，即使它开着远程调试。原来“发现所有浏览器的 DevToolsActivePort 就连”的实验路径（Chrome、Edge、Brave、Chromium 各渠道）去掉了。
+
+测试：新增 `browser-signin`。用一个临时无头浏览器扮演用户的浏览器：先让它带上夹具网站的 Cookie，再把它的 `DevToolsActivePort` 放进假的 LOCALAPPDATA 下 Edge 的用户数据目录。覆盖打开时标签页开在它里面并带 Cookie、关闭时不连也不列出、选了 Chrome 但 Chrome 没开远程调试时退回、浏览器一直不回应握手时等待有上限并在一分钟内不再等待。
+
+## 2026-10-25：记住登录（取代连接用户自己的浏览器）
+
+用户试了上一节的做法后说：开了 cookies 以后每次都还要在浏览器里点允许，太麻烦，要一次配置到位。查证：Chrome 的说明里，`chrome://inspect/#remote-debugging` 这条路每次连接都要用户确认，用来防恶意程序，没有记住选择的选项，也没有能跳过它的策略。Playwright 的浏览器扩展靠令牌免去确认，但扩展上架前只能用开发人员模式加载，Edge 会一直提醒，调试期间每个标签页顶部还有提示条。用户在“DSH 浏览器自己记住登录”和“装 DSH 扩展、用现有登录”之间选了前者；Playwright MCP 和 Chrome DevTools MCP 默认也是这样做的。
+
+实测（Edge 156，临时目录，没碰用户自己的浏览器）：
+- 带 `--remote-debugging-port=0` 的非默认配置：普通 Cookie 在 `Browser.close` 正常退出后保留，会话 Cookie 不保留。
+- 加 `--restore-last-session` 后会话 Cookie 也保留。有窗口模式配合 `--no-startup-window` 不恢复旧标签页；无头模式会恢复，启动前删掉配置里的 `Default\Sessions` 就不恢复，会话 Cookie 照样在。
+- Cookie 写入 1 秒后强杀浏览器，这个 Cookie 就丢了：浏览器每 30 秒才写一次盘，正常退出时才立刻写。强杀后 `DevToolsActivePort` 留在配置里，`profile.exit_type` 是 `Crashed`。
+- Edge 会把新配置自动登录到 Windows 的微软账户，带上约 19 个微软网站的 Cookie。在配置里预先写 `signin.allowed: false` 没有用（Edge 启动后改回 true），换成非默认的配置目录（`--profile-directory`）也一样。
+
+做法：
+- `browserSignIn` 打开后，专用浏览器用 `agent-browser\kept-<edge|chrome>` 这个保留的配置，标签页放在配置自己的上下文里，不再建隔离上下文。插件不再连用户自己的浏览器，`WCU_BROWSER_CONSENT_MS`、`signedIn`、`signInNote` 都去掉了。
+- 服务因输入关闭而结束时，先 `Browser.close`，最多等 3 秒再收尾。查出一个旧问题：浏览器正常关闭时会先断开调试连接，lane 一收到断开就立刻结束浏览器进程，所以空闲关闭和服务结束都来不及写 Cookie。现在断开后先等 3 秒，浏览器还在才结束它。
+- 保留的配置里还有 DSH 浏览器在跑时（另一个服务的，或服务结束时没关掉的），接上它，不再启动第二个：第二次启动只会把窗口交给已有的浏览器然后退出。`dsh-server-pid` 记下负责关闭它的服务；那个服务还活着时，后来的服务只共用、不关闭。连不上的端口文件先删掉。
+- 路由说明：遇到登录页时，请用户在 DSH 浏览器窗口（蓝框）里自己登录一次，不代填密码和验证码；“显示浏览器窗口”关着时先请用户打开。带登录时发送、发帖、购买、删除、改账户设置前先问用户。
+
+测试：`browser-signin` 改写，全程无头。第一个服务登录后退出，第二个服务启动的浏览器里仍是登录状态（含会话 Cookie），也没有恢复旧标签页；服务被强杀后留下的端口文件不影响下一次启动；第二个服务共用正在跑的浏览器，它结束时不关浏览器；开关关闭时每次都是空白配置；用户浏览器的 `DevToolsActivePort` 在两种设置下都不列出、不连接。

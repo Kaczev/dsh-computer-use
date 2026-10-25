@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, normalizeSettings, enabledToolsForSettings, toolSelectionKey, STOP_SHORTCUT_PATTERN, TOOL_NAMES } from './settings.mjs';
+import { DEFAULT_SETTINGS, normalizeSettings, enabledToolsForSettings, toolSelectionKey, STOP_SHORTCUT_PATTERN, TOOL_NAMES, BROWSER_APPS, repairStaleSettings } from './settings.mjs';
 import { atomicJson } from './takeover.mjs';
 import { installActivity } from './activity.mjs';
 
@@ -15,6 +15,10 @@ export function createLiveReference(value){
   return Object.freeze({get:()=>current,[Symbol.for('cosmokit.volatile.write')]:next=>{current=next;}});
 }
 const fields = {
+  browserFirst: z.boolean().default(true).description('网页优先使用浏览器通道 / Prefer browser use for web pages'),
+  browserVisible: z.boolean().default(true).description('显示DSH浏览器窗口 / Show the DSH browser'),
+  browserApp: z.union(BROWSER_APPS.map(value=>z.const(value))).default('default').description('使用的浏览器 / Browser'),
+  browserSignIn: z.boolean().default(false).description('记住登录 / Keep sign-ins'),
   mode: z.union([z.const('lite'),z.const('full')]).default('full').description('旧版工具模式 / Legacy tool mode'),
   toolPreset: z.union(['auto','full','lite','lazy','custom'].map(value=>z.const(value))).default('auto').description('工具加载方案 / Tool preset'),
   enabledTools: z.array(z.union(TOOL_NAMES.map(name=>z.const(name)))).max(24).default([...TOOL_NAMES]).description('启用的工具 / Enabled tools'),
@@ -33,30 +37,47 @@ export const SettingsConfig = z.object(fields);
 // Some Desktop loaders resolve Schemastery without the volatile() convenience
 // method. Never silently omit the metadata the host uses to expose the form.
 export const Config = z.object({ ...Object.fromEntries(Object.entries(fields).map(([key,field])=>[key,typeof field.volatile === 'function' ? field.volatile() : field.extra('volatile',true)])),
-  toolCallTimeoutMs: z.number().min(1).default(60000).description('工具调用超时（毫秒） / Tool timeout (ms)'),
+  // wait_for accepts 60 s; leave room for backend startup and its final result.
+  toolCallTimeoutMs: z.number().min(1).default(90000).description('工具调用超时（毫秒） / Tool timeout (ms)'),
   failOnStartupError: z.boolean().default(false)
 });
 // A mixed-version Desktop can understand volatile schema metadata while its
 // selected validator still returns plain values. Give the Loader the official
 // shared reference protocol for both initial and candidate validation. The
 // fields are validated JSON scalars or an immutable array of tool names.
+// The same validator also accepts a saved choice this version no longer offers
+// (see repairStaleSettings): DSH would otherwise refuse the entry and every
+// tool would vanish. What was reset rides along on the value for apply().
+export const REPAIRED_SETTINGS=Symbol.for('dsh-computer-use-win.repairedSettings');
 const validation=Config['~standard'];
 Object.defineProperty(Config,'~standard',{value:{...validation,validate(input){
-  const result=validation.validate(input);
-  if(!result.issues)for(const key of Object.keys(fields)){
-    if(typeof result.value[key]?.get!=='function')result.value[key]=createLiveReference(result.value[key]);
+  let result=validation.validate(input),repaired=[];
+  if(result.issues){
+    const repair=repairStaleSettings(input);
+    if(repair.repaired.length){const retry=validation.validate(repair.value);if(!retry.issues){result=retry;repaired=repair.repaired;}}
+  }
+  if(!result.issues){
+    for(const key of Object.keys(fields)){
+      if(typeof result.value[key]?.get!=='function')result.value[key]=createLiveReference(result.value[key]);
+    }
+    if(repaired.length)Object.defineProperty(result.value,REPAIRED_SETTINGS,{value:Object.freeze(repaired)});
   }
   return result;
 }}});
+// Two entries of this plugin in one profile (a bundle listed twice, or an old
+// manual entry beside the bundle) start two servers under one name, and DSH
+// keeps one set of mcp__wincu tools. Report it instead of leaving it silent.
+const liveAdapters=new Set();
 export function bridgeConfig(config = {}, runtime = {}) {
   const settings = normalizeSettings(config);
   return {
     serverName: 'wincu', transport: 'stdio', command: process.execPath,
     args: [fileURLToPath(new URL('./server.mjs', import.meta.url))],
-    env: { ELECTRON_RUN_AS_NODE: '1', WCU_TOOL_MODE: settings.toolPreset==='lazy'?'lazy':settings.mode, WCU_ENABLED_TOOLS: JSON.stringify(enabledToolsForSettings(settings)), WCU_SETTINGS_JSON: JSON.stringify(settings),
+    env: { ELECTRON_RUN_AS_NODE: '1', WCU_BROWSER_HEADLESS: settings.browserVisible?'0':'1', WCU_BROWSER_APP: settings.browserApp, WCU_BROWSER_SIGNIN: settings.browserSignIn?'1':'0', WCU_TOOL_MODE: settings.toolPreset==='lazy'?'lazy':settings.mode, WCU_ENABLED_TOOLS: JSON.stringify(enabledToolsForSettings(settings)), WCU_SETTINGS_JSON: JSON.stringify(settings),
       ...(runtime.configFile ? { WCU_CONFIG_FILE: runtime.configFile, WCU_STATE_FILE: runtime.stateFile } : {}),
-      ...(runtime.activityFile ? {WCU_ACTIVITY_FILE:runtime.activityFile}: {}) },
-    toolCallTimeoutMs: config.toolCallTimeoutMs ?? 60000,
+      ...(runtime.activityFile ? {WCU_ACTIVITY_FILE:runtime.activityFile}: {}),
+      ...(runtime.notices ? {WCU_ADAPTER_NOTICES:JSON.stringify(runtime.notices)}: {}) },
+    toolCallTimeoutMs: config.toolCallTimeoutMs ?? 90000,
     failOnStartupError: config.failOnStartupError ?? false
   };
 }
@@ -64,6 +85,16 @@ export async function apply(ctx, config) {
   const bridge = await import('@deepseek-ai/dsh-mcp-client');
   const root = mkdtempSync(path.join(os.tmpdir(), 'dsh-wcu-control-'));
   const runtime = { configFile: path.join(root,'settings.json'), stateFile: path.join(root,'state.json'), activityFile:path.join(root,'activity.json') };
+  // Reset settings go to the DSH log and, through the server, into the health
+  // and tools results the agent reads. Which duplicate's tools DSH keeps is
+  // up to the host, so a duplicate entry is reported in the log only.
+  const self = {};
+  if (config?.[REPAIRED_SETTINGS]?.length) {
+    runtime.notices = { settingsRepaired: [...config[REPAIRED_SETTINGS]] };
+    ctx.logger.warn('dsh-computer-use-win: saved settings this version does not offer were reset to their defaults: %s', runtime.notices.settingsRepaired.join('; '));
+  }
+  liveAdapters.add(self); ctx.effect(() => () => { liveAdapters.delete(self); });
+  if (liveAdapters.size > 1) ctx.logger.warn('dsh-computer-use-win: %d entries of this plugin run in one profile, and DSH keeps only one set of mcp__wincu tools. Remove the extra entry from dsh.profile.bundles in the profile package.json or from its cordis.patch.yml.', liveAdapters.size);
   installActivity(ctx,runtime.activityFile);
   let desired = normalizeSettings(config), runningSelection, connection, stopped = false;
   let updates = Promise.resolve();
@@ -102,7 +133,8 @@ export async function apply(ctx, config) {
     const timer = setInterval(()=>{
       // Older validators keep plain values rather than volatile references.
       // The Loader still commits the validated raw options for those hosts.
-      try {const next=normalizeSettings({...config,...ctx.fiber.entry?.options?.config});if(JSON.stringify(next)!==JSON.stringify(desired))applySettings(next).catch(error=>ctx.logger.error(error));}
+      // The raw entry still holds any value the validator reset; reset it here too.
+      try {const next=normalizeSettings({...config,...repairStaleSettings(ctx.fiber.entry?.options?.config).value});if(JSON.stringify(next)!==JSON.stringify(desired))applySettings(next).catch(error=>ctx.logger.error(error));}
       catch(error){ctx.logger.error(error);}
     },250);
     timer.unref(); return ()=>clearInterval(timer);
