@@ -6,15 +6,15 @@
 
 ## 本版改了什么
 
-当前版本为 `0.5.1-k1`，主要调整如下：
+当前 npm 版本为 `0.1.5`，沿用此前 `0.5.1-k1` 的修复；版本号独立于上游。主要调整如下：
 
 - **兼容空的 `elementId`。** 点击、双击、移动鼠标、滚动和元素检查在收到空字符串或纯空白的 `elementId` 时，使用同时提供的 `x`、`y` 坐标。非空 ID 仍然优先；失效或无效的非空 ID 仍会报错，不会静默改成坐标操作。
-- **区分包名并修正客户端注册。** 本版包名为 `dsh-computer-use`，浏览器模块使用同名 ID，修复改名后客户端加载失败的问题。MCP 服务名仍为 `wincu`。
+- **区分包名并修正客户端注册。** 本版 npm 包名为 `@kaczev/dsh-computer-use`，浏览器模块使用同名 ID，修复改名后客户端加载失败的问题。MCP 服务名仍为 `wincu`。
 - **补充参数分派回归测试。** 覆盖空 ID、零或负坐标、缺失坐标、ID 优先级与失效 ID 拒绝等情况，不发送真实鼠标键盘输入。
 
 本次修复没有修改 DSH 的模型／供应商 schema 适配逻辑。版本说明见 [RELEASE-k1.md](RELEASE-k1.md)。
 
-**本版仅通过 GitHub 提供，尚未发布到 npm。** `dsh-computer-use-win` 是上游包名，安装它会得到上游版本，而不是本版。请勿同时启用本版与上游的 `wincu` 服务。
+**本版 npm 包名为 [`@kaczev/dsh-computer-use`](https://www.npmjs.com/package/@kaczev/dsh-computer-use)。** `dsh-computer-use-win` 是上游包名，安装它会得到上游版本，而不是本版。请勿同时启用本版与上游的 `wincu` 服务。
 
 [上游项目](https://github.com/Yu-tao-Li/dsh-computer-use-win) · [本版发布](https://github.com/Kaczev/dsh-computer-use/releases) · [本版反馈](https://github.com/Kaczev/dsh-computer-use/issues) · [MIT 许可](LICENSE)
 
@@ -46,7 +46,7 @@
 1. 右键点击任务栏托盘里的 DSH 图标，选“打开 DSH 终端”，然后运行：
 
    ```powershell
-   dsh plugin --profile desktop add github:Kaczev/dsh-computer-use
+   dsh plugin --profile desktop add @kaczev/dsh-computer-use@0.1.5
    ```
 
 2. 再右键托盘图标，选“退出”，然后重新打开 DSH Desktop。只关掉窗口不够：窗口关了，DSH 还在托盘里运行，不会加载新装的插件。
@@ -66,10 +66,10 @@
 DSH Web：
 
 ```powershell
-dsh plugin --profile web add github:Kaczev/dsh-computer-use
+dsh plugin --profile web add @kaczev/dsh-computer-use@0.1.5
 ```
 
-装好后重启 `dsh web`。用别的 profile 时，把 `web` 换成它的名字。安装本版请使用本仓库的 GitHub 地址，不要在插件市场选择上游的 **dsh-computer-use-win**。
+装好后重启 `dsh web`。用别的 profile 时，把 `web` 换成它的名字。安装本版请使用上面的 scoped npm 包名，或使用 `github:Kaczev/dsh-computer-use` 安装源码，不要在插件市场选择上游的 **dsh-computer-use-win**。
 
 也可以下载本仓库提供的 [0.5.1-k1 安装包](https://github.com/Kaczev/dsh-computer-use/blob/main/dsh-computer-use-0.5.1-k1.tgz)，通过 DSH 插件管理器安装。升级时替换已有版本，不要额外启用第二个 `wincu` 服务。
 
@@ -303,9 +303,9 @@ MIT 许可。本仓库是 [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu
 
 **This is a lightly modified fork of [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win), based on upstream 0.5.1.** The main features, architecture, interface and original documentation come from the upstream author and contributors. Kaczev maintains this fork with small fixes for issues encountered in use.
 
-Version `0.5.1-k1` accepts empty or whitespace-only optional `elementId` values when coordinates are supplied. Nonblank IDs still take precedence, and stale or invalid IDs still fail. The package is renamed to `dsh-computer-use`, with a matching browser module ID to fix client loading after the rename. Argument-dispatch regression tests were added; DSH's model/provider schema adaptation is unchanged. See [release notes](RELEASE-k1.md).
+The npm release is `0.1.5`, versioned independently of upstream and retaining the earlier `0.5.1-k1` fixes. It accepts empty or whitespace-only optional `elementId` values when coordinates are supplied. Nonblank IDs still take precedence, and stale or invalid IDs still fail. The npm package is named `@kaczev/dsh-computer-use`, with a matching browser module ID to fix client loading after the rename. Argument-dispatch regression tests were added; DSH's model/provider schema adaptation is unchanged. See [release notes](RELEASE-k1.md).
 
-**This fork is distributed through GitHub only and has not been published to npm.** The npm package `dsh-computer-use-win` belongs to upstream. Do not enable both copies of the `wincu` service. Report fork-specific issues [in this repository](https://github.com/Kaczev/dsh-computer-use/issues). The feature descriptions and screenshots below are retained from upstream; the screenshots show upstream 0.5.1.
+**This fork uses the npm package [`@kaczev/dsh-computer-use`](https://www.npmjs.com/package/@kaczev/dsh-computer-use).** The npm package `dsh-computer-use-win` belongs to upstream. Do not enable both copies of the `wincu` service. Report fork-specific issues [in this repository](https://github.com/Kaczev/dsh-computer-use/issues). The feature descriptions and screenshots below are retained from upstream; the screenshots show upstream 0.5.1.
 
 This plugin lets a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) agent see and use the real Windows apps on your computer. It can find buttons and text fields, read text on the screen, click, type, and switch or manage windows.
 
@@ -327,7 +327,7 @@ You need a Windows computer with DSH Desktop installed. The plugin uses Windows 
 1. Right-click the DSH icon in the taskbar tray, choose **Open DSH Terminal**, and run:
 
    ```powershell
-   dsh plugin --profile desktop add github:Kaczev/dsh-computer-use
+   dsh plugin --profile desktop add @kaczev/dsh-computer-use@0.1.5
    ```
 
 2. Right-click the tray icon again, choose **Quit**, then open DSH Desktop again. Closing the window is not enough: DSH keeps running in the tray and does not load the new plugin.
@@ -347,10 +347,10 @@ The `desktop` in the command is the profile that DSH Desktop uses. If you instal
 For DSH Web:
 
 ```powershell
-dsh plugin --profile web add github:Kaczev/dsh-computer-use
+dsh plugin --profile web add @kaczev/dsh-computer-use@0.1.5
 ```
 
-Restart `dsh web` after installing. If you use another profile, replace `web` with its name. Use this repository's GitHub source for this fork; the marketplace package **dsh-computer-use-win** is upstream.
+Restart `dsh web` after installing. If you use another profile, replace `web` with its name. Use the scoped npm package above, or install the source with `github:Kaczev/dsh-computer-use`; the marketplace package **dsh-computer-use-win** is upstream.
 
 Alternatively, download this repository's [0.5.1-k1 archive](https://github.com/Kaczev/dsh-computer-use/blob/main/dsh-computer-use-0.5.1-k1.tgz) and install it through the DSH plugin manager. Replace the existing version rather than enabling a second `wincu` service.
 

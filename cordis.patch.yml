@@ -11,6 +11,6 @@
 
 - insert:
     - id: mcp-dsh-computer-use-win
-      name: 'dsh-computer-use'
+      name: '@kaczev/dsh-computer-use'
       config:
         mode: full

@@ -35,7 +35,7 @@ ctx.provide('systemPrompt',{tools(){return ()=>{}},section(){return ()=>{}},getS
 ctx.provide('profileContext',{home:root,dir:root,name:'isolated-wcu-test'});
 ctx.provide('configEditor',editor);ctx.provide('loader',{await:async()=>{}});
 const tools=new ToolRuntime(ctx),settings=new SettingsForms(ctx);
-const fiber=ctx.plugin(adapter,raw);entry={id:1,options:{id:'mcp-dsh-computer-use-win',name:'dsh-computer-use/mcp/dsh-plugin.mjs',config:raw},fiber:fiber.ctx.fiber};
+const fiber=ctx.plugin(adapter,raw);entry={id:1,options:{id:'mcp-dsh-computer-use-win',name:'@kaczev/dsh-computer-use/mcp/dsh-plugin.mjs',config:raw},fiber:fiber.ctx.fiber};
 const until=async test=>{const deadline=Date.now()+12000;while(!await test()){if(Date.now()>deadline)throw Error('Host integration condition timed out; fixture='+root);await new Promise(r=>setTimeout(r,40))}};
 try {
   await fiber;

@@ -1,6 +1,6 @@
 // Browser module: DSH React, settings transport, and real navigation slots.
 window.__ModuleLoader__.load({
-  id: 'dsh-computer-use',
+  id: '@kaczev/dsh-computer-use',
   factory: (require) => {
     const React = require('react'), h = React.createElement;
     const NS = 'windowsComputerUse.settings';
