@@ -18,7 +18,7 @@ const patch=yaml.load(await readFile(new URL('../cordis.patch.yml',import.meta.u
 const row=patch.flatMap(x=>x.insert||[]).find(x=>x.id==='mcp-dsh-computer-use-win');
 const meta=registry.resolveMeta(row.name,new URL('../package.json',import.meta.url).href);
 assert.ok(meta,'The host must discover the client from the actual bundle loader row');
-assert.equal(meta.packageName,'dsh-computer-use-win');
+assert.equal(meta.packageName,'dsh-computer-use');
 assert.ok(meta.meta.clientPath.endsWith(path.join('mcp','client.js')));
 for(const dependency of meta.meta.inject){
   assert.ok(registry.resolveMeta(dependency,pathToFileURL(path.resolve(modules,'../package.json')).href),`Host client dependency missing: ${dependency}`);

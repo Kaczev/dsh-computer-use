@@ -20,7 +20,7 @@ const checkout = fileURLToPath(new URL('../', import.meta.url));
 export async function makeProfile() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'wcu-bundle-startup-'));
   const profile = path.join(root, 'profile with spaces');
-  const installed = path.join(profile, 'node_modules', 'dsh-computer-use-win');
+  const installed = path.join(profile, 'node_modules', 'dsh-computer-use');
   await mkdir(installed, { recursive: true });
   await writeFile(path.join(profile, 'package.json'), '{"name":"startup-fixture","private":true}\n');
   for (const entry of ['package.json', 'cordis.patch.yml', 'mcp', 'scripts', 'docs']) {
@@ -45,7 +45,7 @@ async function evaluateBundle(profile, patchPath) {
   const rows = patch.flatMap(layer => layer.insert || []);
   const entries = rows.filter(row => row.id === 'mcp-dsh-computer-use-win');
   assert.equal(entries.length, 1, 'Expected one wincu bundle entry');
-  assert.equal(entries[0].name, 'dsh-computer-use-win');
+  assert.equal(entries[0].name, 'dsh-computer-use');
   const require = createRequire(new URL('package.json', baseUrl));
   const adapter = await import(pathToFileURL(require.resolve(entries[0].name)).href);
   return {
