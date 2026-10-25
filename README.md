@@ -1,14 +1,26 @@
-# dsh-computer-use-win
+# dsh-computer-use
 
-**让 DSH 看懂并操作你的 Windows 桌面。**
+**这是 [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win) 的微调版，基于上游 0.5.1。**
 
-[![npm](https://img.shields.io/npm/v/dsh-computer-use-win?label=npm&color=blue)](https://www.npmjs.com/package/dsh-computer-use-win) [![CI](https://github.com/Yu-tao-Li/dsh-computer-use-win/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Yu-tao-Li/dsh-computer-use-win/actions/workflows/ci.yml) ![Windows](https://img.shields.io/badge/platform-Windows-0078D6) [![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+插件的主要功能、架构、界面和原有文档均来自上游作者及贡献者。本仓库由 Kaczev 维护，只针对实际使用中遇到的问题做小范围修复；桌面操作能力仍沿用上游实现。感谢 [Yu-tao-Li](https://github.com/Yu-tao-Li) 和上游贡献者的工作。
 
-您的 [**Star ⭐ ↗**](https://github.com/Yu-tao-Li/dsh-computer-use-win) 就是我更新的动力，球球了，这对我很重要！如有问题，欢迎去 [**提 Issue ↗**](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues/new)，**您来许愿，我来实现！**
+## 本版改了什么
+
+当前版本为 `0.5.1-k1`，主要调整如下：
+
+- **兼容空的 `elementId`。** 点击、双击、移动鼠标、滚动和元素检查在收到空字符串或纯空白的 `elementId` 时，使用同时提供的 `x`、`y` 坐标。非空 ID 仍然优先；失效或无效的非空 ID 仍会报错，不会静默改成坐标操作。
+- **区分包名并修正客户端注册。** 本版包名为 `dsh-computer-use`，浏览器模块使用同名 ID，修复改名后客户端加载失败的问题。MCP 服务名仍为 `wincu`。
+- **补充参数分派回归测试。** 覆盖空 ID、零或负坐标、缺失坐标、ID 优先级与失效 ID 拒绝等情况，不发送真实鼠标键盘输入。
+
+本次修复没有修改 DSH 的模型／供应商 schema 适配逻辑。版本说明见 [RELEASE-k1.md](RELEASE-k1.md)。
+
+**本版仅通过 GitHub 提供，尚未发布到 npm。** `dsh-computer-use-win` 是上游包名，安装它会得到上游版本，而不是本版。请勿同时启用本版与上游的 `wincu` 服务。
+
+[上游项目](https://github.com/Yu-tao-Li/dsh-computer-use-win) · [本版发布](https://github.com/Kaczev/dsh-computer-use/releases) · [本版反馈](https://github.com/Kaczev/dsh-computer-use/issues) · [MIT 许可](LICENSE)
 
 **语言 / Language:** [简体中文](#简体中文) · [English](#english)
 
-[Releases](https://github.com/Yu-tao-Li/dsh-computer-use-win/releases) · [npm](https://www.npmjs.com/package/dsh-computer-use-win) · [Issues](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues)
+以下功能介绍和截图沿用上游文档；截图展示的是上游 0.5.1，不代表本版新增功能。使用本版遇到的问题请先在本仓库反馈。
 
 ---
 
@@ -34,7 +46,7 @@
 1. 右键点击任务栏托盘里的 DSH 图标，选“打开 DSH 终端”，然后运行：
 
    ```powershell
-   dsh plugin --profile desktop add dsh-computer-use-win
+   dsh plugin --profile desktop add github:Kaczev/dsh-computer-use
    ```
 
 2. 再右键托盘图标，选“退出”，然后重新打开 DSH Desktop。只关掉窗口不够：窗口关了，DSH 还在托盘里运行，不会加载新装的插件。
@@ -54,23 +66,21 @@
 DSH Web：
 
 ```powershell
-dsh plugin --profile web add dsh-computer-use-win
+dsh plugin --profile web add github:Kaczev/dsh-computer-use
 ```
 
-装好后重启 `dsh web`。用别的 profile 时，把 `web` 换成它的名字。也可以在插件市场搜索 **dsh-computer-use-win**，或者从 GitHub 安装：
+装好后重启 `dsh web`。用别的 profile 时，把 `web` 换成它的名字。安装本版请使用本仓库的 GitHub 地址，不要在插件市场选择上游的 **dsh-computer-use-win**。
 
-```powershell
-dsh plugin --profile desktop add github:Yu-tao-Li/dsh-computer-use-win
-```
+也可以下载本仓库提供的 [0.5.1-k1 安装包](https://github.com/Kaczev/dsh-computer-use/blob/main/dsh-computer-use-0.5.1-k1.tgz)，通过 DSH 插件管理器安装。升级时替换已有版本，不要额外启用第二个 `wincu` 服务。
 
-不在 DSH 里，也可以让任何 MCP 客户端启动它：
+不在 DSH 里，也可以让 MCP 客户端通过本地源码启动：先克隆本仓库，再把下面的路径换成实际位置。
 
 ```json
 {
   "mcpServers": {
     "wincu": {
-      "command": "npx",
-      "args": ["-y", "dsh-computer-use-win"]
+      "command": "node",
+      "args": ["C:/path/to/dsh-computer-use/mcp/server.mjs"]
     }
   }
 }
@@ -277,19 +287,25 @@ npm ci
 npm test
 ```
 
-单独运行的 MCP 服务不依赖任何第三方包；接入 DSH 时，用的是 DSH 自带的 Schemastery 和官方 MCP 桥。开发依赖只用于测试。`npm test` 会运行 **27 套互相隔离的回归测试**，覆盖设置兼容、接管与停止、界面读取、截图、文字识别协议和输入边界。它不会发出真实的键盘鼠标输入，也不会改动你装好的 DSH 配置；需要真实界面的测试只操作专用的测试窗口，日志写在命令输出的临时目录里。
+单独运行的 MCP 服务不依赖任何第三方包；接入 DSH 时，用的是 DSH 自带的 Schemastery 和官方 MCP 桥。开发依赖只用于测试。`npm test` 会运行 **互相隔离的回归测试**，覆盖设置兼容、接管与停止、界面读取、截图、文字识别协议和输入边界。它不会发出真实的键盘鼠标输入，也不会改动你装好的 DSH 配置；需要真实界面的测试只操作专用的测试窗口，日志写在命令输出的临时目录里。
 
 `node test/notepad-e2e.mjs` 是另一项会真实打字的测试，它会打开记事本，请在专门的测试桌面上运行。
 
 README 里的两张图由 `assets/diagrams/` 里的网页生成。改了图里的文字后，运行 `node assets/diagrams/render.mjs`，它会用本机的 Chrome 或 Edge 重新导出中英文、浅色和深色共 8 张图。
 
-MIT 许可。本项目基于 [cgissing/windows-computer-use](https://github.com/cgissing/windows-computer-use) 衍生，来源与版权见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+MIT 许可。本仓库是 [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win) 的微调版；上游又基于 [cgissing/windows-computer-use](https://github.com/cgissing/windows-computer-use) 衍生。本仓库保留原有版权与许可声明，来源说明见 [THIRD_PARTY.md](THIRD_PARTY.md)，许可全文见 [LICENSE](LICENSE)。
 
-[插件市场](https://awesome-dsh-plugin.com) · [发布记录](https://github.com/Yu-tao-Li/dsh-computer-use-win/releases) · [反馈问题](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues) · [返回中文顶部 ↑](#简体中文)
+[上游项目](https://github.com/Yu-tao-Li/dsh-computer-use-win) · [本版发布](https://github.com/Kaczev/dsh-computer-use/releases) · [本版反馈](https://github.com/Kaczev/dsh-computer-use/issues) · [返回中文顶部 ↑](#简体中文)
 
 ---
 
 ## English
+
+**This is a lightly modified fork of [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win), based on upstream 0.5.1.** The main features, architecture, interface and original documentation come from the upstream author and contributors. Kaczev maintains this fork with small fixes for issues encountered in use.
+
+Version `0.5.1-k1` accepts empty or whitespace-only optional `elementId` values when coordinates are supplied. Nonblank IDs still take precedence, and stale or invalid IDs still fail. The package is renamed to `dsh-computer-use`, with a matching browser module ID to fix client loading after the rename. Argument-dispatch regression tests were added; DSH's model/provider schema adaptation is unchanged. See [release notes](RELEASE-k1.md).
+
+**This fork is distributed through GitHub only and has not been published to npm.** The npm package `dsh-computer-use-win` belongs to upstream. Do not enable both copies of the `wincu` service. Report fork-specific issues [in this repository](https://github.com/Kaczev/dsh-computer-use/issues). The feature descriptions and screenshots below are retained from upstream; the screenshots show upstream 0.5.1.
 
 This plugin lets a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) agent see and use the real Windows apps on your computer. It can find buttons and text fields, read text on the screen, click, type, and switch or manage windows.
 
@@ -311,7 +327,7 @@ You need a Windows computer with DSH Desktop installed. The plugin uses Windows 
 1. Right-click the DSH icon in the taskbar tray, choose **Open DSH Terminal**, and run:
 
    ```powershell
-   dsh plugin --profile desktop add dsh-computer-use-win
+   dsh plugin --profile desktop add github:Kaczev/dsh-computer-use
    ```
 
 2. Right-click the tray icon again, choose **Quit**, then open DSH Desktop again. Closing the window is not enough: DSH keeps running in the tray and does not load the new plugin.
@@ -331,23 +347,21 @@ The `desktop` in the command is the profile that DSH Desktop uses. If you instal
 For DSH Web:
 
 ```powershell
-dsh plugin --profile web add dsh-computer-use-win
+dsh plugin --profile web add github:Kaczev/dsh-computer-use
 ```
 
-Restart `dsh web` after installing. If you use another profile, replace `web` with its name. You can also search the plugin marketplace for **dsh-computer-use-win**, or install from GitHub:
+Restart `dsh web` after installing. If you use another profile, replace `web` with its name. Use this repository's GitHub source for this fork; the marketplace package **dsh-computer-use-win** is upstream.
 
-```powershell
-dsh plugin --profile desktop add github:Yu-tao-Li/dsh-computer-use-win
-```
+Alternatively, download this repository's [0.5.1-k1 archive](https://github.com/Kaczev/dsh-computer-use/blob/main/dsh-computer-use-0.5.1-k1.tgz) and install it through the DSH plugin manager. Replace the existing version rather than enabling a second `wincu` service.
 
-Outside DSH, any MCP client can launch it:
+Outside DSH, clone this repository and configure your MCP client to launch the local source. Replace the example path with the actual checkout path:
 
 ```json
 {
   "mcpServers": {
     "wincu": {
-      "command": "npx",
-      "args": ["-y", "dsh-computer-use-win"]
+      "command": "node",
+      "args": ["C:/path/to/dsh-computer-use/mcp/server.mjs"]
     }
   }
 }
@@ -554,12 +568,12 @@ npm ci
 npm test
 ```
 
-The standalone MCP server needs no third-party packages at runtime. Inside DSH, it uses DSH's own Schemastery and the official MCP bridge. Development dependencies are only for testing. `npm test` runs **27 isolated regression suites** covering settings compatibility, takeover and stopping, reading controls, capture, OCR protocols and input edge cases. It sends no real keyboard or mouse input and does not touch your installed DSH profiles. Tests that need a real interface use only their own test windows, and logs go to the temporary folder the command prints.
+The standalone MCP server needs no third-party packages at runtime. Inside DSH, it uses DSH's own Schemastery and the official MCP bridge. Development dependencies are only for testing. `npm test` runs **isolated regression suites** covering settings compatibility, takeover and stopping, reading controls, capture, OCR protocols and input edge cases. It sends no real keyboard or mouse input and does not touch your installed DSH profiles. Tests that need a real interface use only their own test windows, and logs go to the temporary folder the command prints.
 
 `node test/notepad-e2e.mjs` is a separate test that really types. It opens Notepad, so run it on a dedicated test desktop.
 
 The two figures in this README are generated from the pages in `assets/diagrams/`. After changing their text, run `node assets/diagrams/render.mjs`; it uses your local Chrome or Edge to export all 8 images again, in Chinese and English, light and dark.
 
-MIT licensed. Derived from [cgissing/windows-computer-use](https://github.com/cgissing/windows-computer-use); see [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and copyright.
+MIT licensed. This repository is a lightly modified fork of [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win), which is derived from [cgissing/windows-computer-use](https://github.com/cgissing/windows-computer-use). Original copyright and license notices are retained. See [THIRD_PARTY.md](THIRD_PARTY.md) for provenance and [LICENSE](LICENSE) for the full license.
 
-[Plugin marketplace](https://awesome-dsh-plugin.com) · [Releases](https://github.com/Yu-tao-Li/dsh-computer-use-win/releases) · [Report an issue](https://github.com/Yu-tao-Li/dsh-computer-use-win/issues) · [Back to English ↑](#english)
+[Upstream project](https://github.com/Yu-tao-Li/dsh-computer-use-win) · [Fork releases](https://github.com/Kaczev/dsh-computer-use/releases) · [Fork issues](https://github.com/Kaczev/dsh-computer-use/issues) · [Back to English ↑](#english)
