@@ -1,5 +1,5 @@
 {
-  "name": "dsh-computer-use-win",
+  "name": "dsh-computer-use",
   "version": "0.5.1-k1",
   "description": "Windows computer use for DeepSeek Harness: an MCP stdio server + PowerShell UIA backend, bridged into DSH via @deepseek-ai/dsh-mcp-client. Read/act on real Windows desktop apps (UI Automation tree, screenshots, typed input, OCR, window management).",
   "type": "module",

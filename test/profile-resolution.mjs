@@ -10,14 +10,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), "dsh-wincu-profile-"));
 const profileDir = path.join(fixtureRoot, "profile");
-const packageDir = path.join(profileDir, "node_modules", "dsh-computer-use-win");
+const packageDir = path.join(profileDir, "node_modules", "dsh-computer-use");
 const serverPath = path.join(packageDir, "mcp", "server.mjs");
 
 try {
   await mkdir(path.dirname(serverPath), { recursive: true });
   await writeFile(path.join(profileDir, "package.json"), JSON.stringify({ name: "fixture-profile" }));
   await writeFile(path.join(packageDir, "package.json"), JSON.stringify({
-    name: "dsh-computer-use-win",
+    name: "dsh-computer-use",
     version: "0.0.0",
     main: "mcp/server.mjs",
     exports: {'.':'./mcp/dsh-plugin.mjs','./mcp/dsh-plugin.mjs':'./mcp/dsh-plugin.mjs','./mcp/server.mjs':'./mcp/server.mjs'},
@@ -25,15 +25,15 @@ try {
   await writeFile(serverPath, "export {};\n");
   const adapterPath = path.join(packageDir, 'mcp', 'dsh-plugin.mjs');
   await writeFile(adapterPath, 'export {};\n');
-  const resolvedAdapter = createRequire(path.join(profileDir, 'package.json')).resolve('dsh-computer-use-win/mcp/dsh-plugin.mjs');
+  const resolvedAdapter = createRequire(path.join(profileDir, 'package.json')).resolve('dsh-computer-use/mcp/dsh-plugin.mjs');
   assert.equal(path.normalize(resolvedAdapter), path.normalize(adapterPath));
-  assert.equal(createRequire(path.join(profileDir, 'package.json')).resolve('dsh-computer-use-win'), adapterPath);
+  assert.equal(createRequire(path.join(profileDir, 'package.json')).resolve('dsh-computer-use'), adapterPath);
 
   // DSH sets baseUrl to the directory containing cordis.yml.
   const baseUrl = pathToFileURL(path.join(profileDir, "cordis.yml")).href;
   const oldPath = fileURLToPath(new URL("mcp/server.mjs", baseUrl));
   const resolvedPath = createRequire(new URL("package.json", baseUrl))
-    .resolve("dsh-computer-use-win/mcp/server.mjs");
+    .resolve("dsh-computer-use/mcp/server.mjs");
 
   assert.equal(path.normalize(oldPath), path.join(profileDir, "mcp", "server.mjs"));
   assert.notEqual(oldPath, serverPath);
@@ -43,7 +43,7 @@ try {
   const patch = await readFile(patchPath, "utf8");
   assert.match(
     patch,
-    /name: 'dsh-computer-use-win'/,
+    /name: 'dsh-computer-use'/,
   );
 
   console.log(JSON.stringify({
@@ -51,7 +51,7 @@ try {
     oldPath,
     resolvedPath,
     resolvedAdapter,
-    packageSpecifier: "dsh-computer-use-win/mcp/server.mjs",
+    packageSpecifier: "dsh-computer-use/mcp/server.mjs",
   }, null, 2));
 } finally {
   await rm(fixtureRoot, { recursive: true, force: true });
