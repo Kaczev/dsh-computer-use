@@ -37,6 +37,7 @@ const suites = [
   ['uia-chromium-smoke', process.execPath, ['test/uia-chromium-smoke.mjs', path.join(root, 'uia-chromium-smoke')]],
   ['sparse-canvas-smoke', process.execPath, ['test/sparse-canvas-smoke.mjs', path.join(root, 'sparse-canvas-smoke')]],
   ['ocr-query-contract', powershell, ['-NoProfile', '-File', 'test/ocr-query-contract.ps1']],
+  ['point-arguments', powershell, ['-NoProfile', '-File', 'test/point-arguments.ps1']],
   ['native-input-errors', powershell, ['-NoProfile', '-File', 'test/native-input-errors.ps1']],
   ['input-upgrade-contract', powershell, ['-NoProfile', '-File', 'test/input-upgrade-contract.ps1']]
 ];

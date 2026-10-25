@@ -1467,7 +1467,8 @@ function Resolve-Element {
 function Get-PointFromArgs {
   param([object]$InputObject)
   $elementId = Get-Prop $InputObject "elementId" $null
-  if ($null -ne $elementId) {
+  # Empty optional IDs from schema adapters must not shadow valid coordinates.
+  if (-not [string]::IsNullOrWhiteSpace($elementId)) {
     $el = Resolve-Element $elementId $InputObject
     $rect = Convert-Rect (Invoke-Safe { $el.Current.BoundingRectangle } $null)
     if ($null -eq $rect) { throw "Element '$elementId' has no clickable bounding box." }
@@ -2066,7 +2067,7 @@ function Invoke-Action {
     "element_info" {
       $detailLevel = Get-DetailLevel $inputObject "compact"
       $elementId = Get-Prop $inputObject "elementId" $null
-      if ($null -ne $elementId) {
+      if (-not [string]::IsNullOrWhiteSpace($elementId)) {
         $el = Resolve-Element $elementId $inputObject
         return ([ordered]@{ ok = $true; element = (Convert-ElementInfo -Element $el -Id $elementId -Depth 0 -DetailLevel $detailLevel) })
       } else {
