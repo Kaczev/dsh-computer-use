@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, rename } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { TakeoverControl, STOPPED } from '../mcp/takeover.mjs';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../mcp/settings.mjs';
@@ -91,8 +91,22 @@ try {
   await resume('');await control.begin();assert.equal((await key(0x79)).paused,false,'Cleared shortcut must not stop');await key(0x79,{down:false});
   assert.equal((await key(0x1b)).paused,true,'Esc must remain available after clearing');await key(0x1b,{down:false});
   await resume('');
-  const shown = await control.command('begin', { indicatorEnabled: true, indicatorIdleMs: 200 });
-  assert.ok(shown.windows >= 1); assert.equal(shown.foreground, initial.foreground, 'Overlay must not activate');
+  const focusStop = path.join(root, 'focus-observer.stop');
+  // PS5 compiles the WinForms observer without PS7 reference-pack dependencies.
+  const observer = spawn('powershell.exe', ['-NoProfile','-File',fileURLToPath(new URL('./foreground-observer.ps1',import.meta.url)),'-TargetPid',String(control.child.pid),'-StopFile',focusStop], {windowsHide:true,env:{...process.env,PSExecutionPolicyPreference:'Bypass'}});
+  let focusOutput='', focusError='';
+  observer.stdout.on('data',b=>focusOutput+=b);observer.stderr.on('data',b=>focusError+=b);
+  const focusExit = new Promise((resolve,reject)=>{observer.on('error',reject);observer.on('exit',code=>resolve(code));});
+  let shown;
+  try {
+    const deadline=Date.now()+15000;
+    while(!focusOutput.includes('READY')) {
+      assert.equal(observer.exitCode,null,focusError);
+      assert(Date.now()<deadline,'Foreground observer did not become ready: '+focusError);
+      await new Promise(r=>setTimeout(r,25));
+    }
+    shown = await control.command('begin', { indicatorEnabled: true, indicatorIdleMs: 200 });
+    assert.ok(shown.windows >= 1);
   assert.equal(shown.overlayCaptureExcluded,false);assert.equal(shown.overlayClickThrough,true);
   const visibleConfig=JSON.parse(await readFile(configFile,'utf8'));
   await saveConfig({...visibleConfig,remoteIndicatorVisible:false});await control.sync();
@@ -102,12 +116,22 @@ try {
   const waitDisplays=async expected=>{const deadline=Date.now()+2500;for(;;){const state=await control.command('status');if(JSON.stringify(state.overlayBounds)===JSON.stringify(expected))return state;if(Date.now()>deadline)throw Error('Display topology did not refresh: '+JSON.stringify(state));await new Promise(r=>setTimeout(r,50));}};
   const virtualScreens=[{left:-1280,top:0,width:1280,height:720},{left:0,top:0,width:1920,height:1080}];
   await control.command('test_displays',{displays:virtualScreens});const attached=await waitDisplays(virtualScreens);
-  assert(attached.displayRevision>shown.displayRevision);assert.equal(attached.foreground,initial.foreground);
+  assert(attached.displayRevision>shown.displayRevision);
   const resizedScreens=[{left:0,top:-900,width:1600,height:900}];
   await control.command('test_displays',{displays:resizedScreens});await waitDisplays(resizedScreens);
   await control.command('test_displays',{displays:[]});await waitDisplays([]);
   await control.command('test_displays',{displays:virtualScreens});await waitDisplays(virtualScreens);
   await control.command('test_restore_displays');await waitDisplays(shown.displays);
+  } finally {
+    await writeFile(focusStop,'stop');
+    const timer=setTimeout(()=>observer.kill(),5000);
+    const code=await focusExit;clearTimeout(timer);
+    assert.equal(code,0,'Foreground observer failed: '+focusError);
+  }
+  const focusReport=JSON.parse(focusOutput.trim().split(/\r?\n/).at(-1));
+  await writeFile(path.join(root,'focus-observer.json'),JSON.stringify({ ...focusReport, diagnostics:focusError },null,2));
+  assert.equal(focusReport.activated,false,'Takeover helper became foreground: '+focusOutput+focusError);
+  assert(focusReport.events>=2,'Foreground observer must sample start and end');
   const preview = path.join(root, 'takeover-preview.png');
   await control.command('test_render', { path: preview });
   const cursorPreview=path.join(root,'cursor-preview.png');

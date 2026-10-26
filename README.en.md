@@ -1,10 +1,14 @@
-# dsh-computer-use · 0.5.2-k2
+# dsh-computer-use · 0.5.2-k2-1
 
 The original plugin was created by **Yu-tao-Li**: [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win). This fork is based on upstream 0.5.2. Its main features, architecture and interface belong to the original author and contributors. We only maintain a few patches for problems encountered in use.
 
 Fork package: `@kaczev/dsh-computer-use`.
 
 ## Our patches
+
+### 0.5.2-k2-1
+
+Test maintenance only: Electron GUI suites use a temporary runtime copy with default sandboxing, and focus regressions observe actual foreground ownership by the takeover helper. No new product patches; runtime logic is unchanged from 0.5.2-k2.
 
 ### 0.5.2-k2
 

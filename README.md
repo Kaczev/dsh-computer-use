@@ -1,10 +1,14 @@
-# dsh-computer-use · 0.5.2-k2
+# dsh-computer-use · 0.5.2-k2-1
 
 原插件由 **Yu-tao-Li** 开发：[Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win)。本版基于上游 0.5.2；插件的主要功能、架构和界面都来自原作者及贡献者。我们只为实际使用中遇到的问题做了少量补丁。
 
 本版包名：`@kaczev/dsh-computer-use`。
 
 ## 我们的补丁
+
+### 0.5.2-k2-1
+
+本次只修测试环境并加固焦点回归：Electron GUI 测试使用临时运行时副本，保持默认沙箱；焦点检查监听接管助手的实际前台归属。不新增产品功能补丁，运行逻辑与 0.5.2-k2 相同。
 
 ### 0.5.2-k2
 
