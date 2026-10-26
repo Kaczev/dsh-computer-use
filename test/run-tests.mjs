@@ -26,6 +26,7 @@ const suites = [
   ['profile-resolution', process.execPath, ['test/profile-resolution.mjs']],
   ['bundle-startup', process.execPath, ['test/bundle-startup.mjs']],
   ['backend-lifecycle', process.execPath, ['test/backend-lifecycle.mjs']],
+  ['target-routing', process.execPath, ['test/target-routing.mjs']],
   ['observation-contract', process.execPath, ['test/observation-contract.mjs']],
   ['activation-cancellation', process.execPath, ['test/activation-cancellation.mjs']],
   ['native-window-discovery', process.execPath, ['test/native-window-discovery.mjs']],

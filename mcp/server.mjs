@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { TakeoverControl, STOPPED } from './takeover.mjs';
 import { TOOL_NAMES, normalizeEnabledTools, browserRoutingInstructions } from './settings.mjs';
-import { BrowserLane, isBrowserCall, isQuietCall, BACKGROUND_FIRST } from './browser.mjs';
+import { BrowserLane, isBrowserCall, normalizeTargetArguments, validateTargetArguments, isQuietCall, BACKGROUND_FIRST } from './browser.mjs';
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -110,7 +110,7 @@ const treeDetailProperties = {
 const browserTabProperty = {
   browserTab: {
     type: "string",
-    description: "Browser-lane tab id from list_windows (browserLane.browsers[].tabs[].id, for example t1a2b). Works on that page over the Chrome DevTools Protocol, in the background: no pointer movement, keyboard focus, clipboard or window activation. Do not combine with windowTitle, processId, nativeWindowHandle or x/y."
+    description: "Optional browser-lane tab id from list_windows (browserLane.browsers[].tabs[].id, for example t1a2b). Omit for desktop targeting; empty or whitespace-only means unset. Operates on the page in the background. Do not combine a nonempty tab id with windowTitle, processId, nativeWindowHandle or x/y."
   }
 };
 
@@ -540,7 +540,7 @@ const concisePropertyDescriptions = {
   focusMode: 'preserve keeps clicked focus; main chooses largest text control.',
   query: 'Literal text; OCR ignores case/whitespace.',
   resolveControl: 'Optional UIA hit-test; may block or return a whole document.',
-  browserTab: 'Browser tab id from list_windows; background page access.'
+  browserTab: 'Optional page tab id; omit for desktop. Empty/blank means unset; no window targets or x/y.'
 };
 function compactSchema(schema, key) {
   const result = {};
@@ -914,7 +914,8 @@ async function callTool(name, args, request) {
   if (name === discoveryName) return manageTools(args);
   const definition = tools.find(tool => tool.name === name);
   if (!definition) throw new Error(`Unknown tool: ${name}`);
-  args = validateArguments(definition.inputSchema, args);
+  args = normalizeTargetArguments(validateArguments(definition.inputSchema, args));
+  validateTargetArguments(args);
   const actionName = name.replace("windows_computer_use_", "");
   const browser = isBrowserCall(args);
   // A browser tab alone names the page, which is what scroll needs.

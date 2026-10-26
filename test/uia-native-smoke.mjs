@@ -20,6 +20,16 @@ try{
   assert.ok(state.ready,JSON.stringify({state,stderr,exitCode:fixture.exitCode,waitedMs:Math.round(performance.now()-started)}));
   console.log('NATIVE_STARTUP '+JSON.stringify({durationMs:Math.round(performance.now()-started),state}));
   const target={nativeWindowHandle:state.hwnd};
+  // No CDP connection is needed for HWND-only or blank-placeholder observations.
+  for(const browserTab of [undefined, '', ' \t']) {
+    const locator={...target,...(browserTab===undefined?{}:{browserTab,windowTitle:' '})};
+    const observed=await call('accessibility_tree',{...locator,maxDepth:5});
+    assert.ok(observed.nodeCount>=3);
+    const snapshot=await call('snapshot',{...locator,includeScreenshot:false});
+    assert.ok(snapshot.nodeCount>=3);
+    const capture=await call('screenshot',{...locator,maxWidth:400});
+    assert.ok(capture.screenshot?.base64,JSON.stringify(capture).slice(0,300));
+  }
   const tree=await call('accessibility_tree',{...target,detailLevel:'full',maxDepth:5});
   assert.equal(tree.targetResponsive,true);assert.ok(tree.nodeCount>=3,JSON.stringify(tree));
   const find=await call('find',{...target,query:'native needle'});assert.ok(find.results.length>0);assert.ok(find.results[0].patterns.includes('Value'));

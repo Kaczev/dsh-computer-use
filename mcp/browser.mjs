@@ -196,9 +196,31 @@ const NEW_TAB = /^(?:(b[0-9a-z]+):)?new-tab$/;
 export function isBrowserElementId(id) {
   return typeof id === 'string' && (ELEMENT_ID.test(id) || NEW_TAB.test(id));
 }
-// A call belongs to the browser lane when it names a tab or a page element.
+// Empty locator placeholders from model/schema adapters are not targets.
+export function normalizeTargetArguments(args) {
+  const normalized = { ...args };
+  for (const key of ['browserTab', 'windowTitle']) {
+    if (typeof normalized[key] === 'string' && !normalized[key].trim()) delete normalized[key];
+  }
+  return normalized;
+}
+
+// A call belongs to the browser lane only when it names a real tab or page element.
 export function isBrowserCall(args) {
-  return !!args && (args.browserTab !== undefined || isBrowserElementId(args.elementId));
+  return !!args && ((typeof args.browserTab === 'string' && !!args.browserTab.trim()) || isBrowserElementId(args.elementId));
+}
+
+export function validateTargetArguments(args) {
+  if (!isBrowserCall(args)) return;
+  const desktop = ['windowTitle', 'processId', 'nativeWindowHandle', 'x', 'y']
+    .filter(key => args[key] !== undefined && !(typeof args[key] === 'string' && !args[key].trim()));
+  if (typeof args.elementId === 'string' && args.elementId.trim() && !isBrowserElementId(args.elementId)) desktop.push('elementId');
+  if (desktop.length) {
+    const page = ['browserTab', 'elementId'].filter(key => key === 'browserTab'
+      ? typeof args[key] === 'string' && args[key].trim() : isBrowserElementId(args[key]));
+    const show = key => `${key}=${JSON.stringify(args[key])}`;
+    fail('INVALID_ARGUMENTS', `Conflicting targets: ${page.map(show).join(', ')} and ${desktop.map(show).join(', ')}. Omit browserTab/page element ids for desktop targeting; omit desktop locators and x/y for page targeting.`);
+  }
 }
 
 // Calls that use neither the user's pointer nor keyboard take a quiet lease: it
@@ -1463,9 +1485,9 @@ export class BrowserLane {
   }
 
   async runPage(action, args, request, call = { tabs: new Set() }) {
+    args = normalizeTargetArguments(args);
+    validateTargetArguments(args);
     if (this.disabled) fail('BROWSER_LANE_UNAVAILABLE', 'the browser lane is turned off (WCU_BROWSER_LANE=off)');
-    const conflict = ['windowTitle', 'processId', 'nativeWindowHandle', 'x', 'y'].filter(key => args[key] !== undefined);
-    if (conflict.length) fail('INVALID_ARGUMENTS', `browserTab and page element ids target a page; drop ${conflict.join(', ')}`);
     if (action === 'invoke' && (args.action ?? 'default') !== 'default') fail('INVALID_ARGUMENTS', `invoke action '${args.action}' is for UI Automation elements; in a page, click the element to open or close it, and scroll its list or the page to bring it into view`);
     const match = typeof args.elementId === 'string' ? ELEMENT_ID.exec(args.elementId) : null;
     const opener = typeof args.elementId === 'string' ? NEW_TAB.exec(args.elementId) : null;
