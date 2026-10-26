@@ -1,10 +1,16 @@
-# dsh-computer-use · 0.5.2-k2-1
+# dsh-computer-use · 0.5.2-k3
 
 The original plugin was created by **Yu-tao-Li**: [Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win). This fork is based on upstream 0.5.2. Its main features, architecture and interface belong to the original author and contributors. We only maintain a few patches for problems encountered in use.
 
 Fork package: `@kaczev/dsh-computer-use`.
 
 ## Our patches
+
+### 0.5.2-k3
+
+Every optional tool argument explicitly accepts `null`. At execution, null uses the default when one exists and otherwise removes the argument. MCP callers can still omit optional fields. When a model provider requires every field, browser calls can use null for HWND, PID, window title and coordinates instead of inventing desktop targets.
+
+Opening a tab still needs only `{"elementId":"new-tab","value":"https://example.com"}`. Real browser/desktop target conflicts remain invalid. Required arguments reject null; numeric limits, types and unknown-field checks remain strict. Regressions cover discovery, new browser tabs, screenshots, UIA and desktop routing.
 
 ### 0.5.2-k2-1
 

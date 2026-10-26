@@ -88,7 +88,8 @@ try {
   const before = foreground();
 
   // Tabs opened at once while the agent browser starts share that one browser.
-  const [first, second] = await Promise.all([call('set_value', { elementId: 'new-tab', value: site + '/' }), call('set_value', { elementId: 'new-tab', value: site + '/page2' })]);
+  const padded=(name,args)=>Object.fromEntries(Object.keys(listed.find(t=>t.name===prefix+name).inputSchema.properties).map(key=>[key,Object.hasOwn(args,key)?args[key]:null]));
+  const [first, second] = await Promise.all([call('set_value', { elementId: 'new-tab', value: site + '/' }), call('set_value', padded('set_value',{ elementId: 'new-tab', value: site + '/page2' }))]);
   assert.equal(first.meta.opened.browser, second.meta.opened.browser, 'Simultaneous first tabs share one agent browser');
   await call('close_window', { browserTab: second.meta.opened.id });
   let r = first;
@@ -101,7 +102,9 @@ try {
   assert.ok(agent?.tabs.some(item => item.id === tab), 'list_windows lists the agent tab');
   assert.ok(!agent.tabs.some(item => /^(about|chrome|edge):/.test(item.url)), 'Only the agent context is listed');
 
-  r = await call('accessibility_tree', { browserTab: tab });
+  r = await call('accessibility_tree', padded('accessibility_tree',{ browserTab: tab }));
+  const captured=await call('screenshot',padded('screenshot',{browserTab:tab}));
+  assert.equal(captured.meta.channel,'browser');assert.ok(captured.images.length);
   assert.equal(r.meta.channel, 'browser'); assert.match(r.page, /textbox "关键词"/); assert.match(r.page, /button "搜索"/);
   const field = idOf(home, /textbox "关键词"/);
   r = await call('set_value', { elementId: field, value: '晴天 周杰伦' });

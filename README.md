@@ -1,10 +1,16 @@
-# dsh-computer-use · 0.5.2-k2-1
+# dsh-computer-use · 0.5.2-k3
 
 原插件由 **Yu-tao-Li** 开发：[Yu-tao-Li/dsh-computer-use-win](https://github.com/Yu-tao-Li/dsh-computer-use-win)。本版基于上游 0.5.2；插件的主要功能、架构和界面都来自原作者及贡献者。我们只为实际使用中遇到的问题做了少量补丁。
 
 本版包名：`@kaczev/dsh-computer-use`。
 
 ## 我们的补丁
+
+### 0.5.2-k3
+
+所有可选工具参数现在都明确接受 `null`，执行时按未提供处理：有默认值就使用默认值，否则移除参数。普通 MCP 调用仍可直接省略可选字段；如果模型端要求填写全部字段，浏览器调用可将 HWND、PID、窗口标题和坐标填为 `null`，不必编造桌面目标。
+
+例如，新建浏览器标签页仍只需 `{"elementId":"new-tab","value":"https://example.com"}`。非空浏览器目标与真实桌面定位混用仍会拒绝；必填参数不接受 `null`，无效数字、类型和未知字段也不会放宽。回归覆盖参数发现、浏览器新建标签页与截图、UIA 和桌面路由。
 
 ### 0.5.2-k2-1
 

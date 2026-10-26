@@ -530,7 +530,7 @@ const conciseDescriptions = {
   move_window: 'Move window to physical SCREEN x/y; updates coordinate homing.'
 };
 const concisePropertyDescriptions = {
-  windowTitle: 'Target title substring.', processId: 'Target PID.', nativeWindowHandle: 'Target HWND.',
+  windowTitle: 'Desktop title substring; null for page targeting.', processId: 'Desktop PID; null for page targeting.', nativeWindowHandle: 'Desktop HWND; null for page targeting.',
   activate: 'Bring forward and keep in front.',
   viewMode: 'UIA view; runtime IDs bypass view filtering.',
   includeOffscreen: 'Include offscreen UIA nodes.', detailLevel: 'compact omits heavy/empty node metadata.',
@@ -593,6 +593,23 @@ const discoveryTool = {
     names: { type: 'array', maxItems: 23, items: { type: 'string' } }
   } }
 };
+// Strict model providers can require every property. Give optional arguments an
+// explicit null representation instead of forcing invented HWNDs/PIDs or values.
+// Use the same schema for tools/list, tools describe and runtime validation.
+function nullableOptionalProperties(schema) {
+  if (schema.type === 'object') {
+    const required = new Set(schema.required || []);
+    for (const [key, child] of Object.entries(schema.properties || {})) {
+      nullableOptionalProperties(child);
+      if (!required.has(key) && !Array.isArray(child.type)) {
+        child.type = [child.type, 'null'];
+        if (child.enum) child.enum = [...child.enum, null];
+      }
+    }
+  } else if (schema.type === 'array') nullableOptionalProperties(schema.items);
+}
+for (const tool of tools) nullableOptionalProperties(tool.inputSchema);
+nullableOptionalProperties(discoveryTool.inputSchema);
 function advertisedTools() {
   return [...tools.filter(tool => enabledTools.has(tool.name)).map(tool => ({
     name: tool.name,
@@ -642,24 +659,25 @@ function safeJson(value) {
 // Never coerce strings/booleans into input coordinates or other action arguments.
 function validateArguments(schema, value, location = "arguments") {
   const fail = message => { throw new Error(`INVALID_ARGUMENTS: ${location} ${message}`); };
-  if (schema.type === "object") {
+  const type = Array.isArray(schema.type) ? schema.type.find(type => type !== 'null') : schema.type;
+  if (type === "object") {
     if (!value || typeof value !== "object" || Array.isArray(value)) fail("must be an object");
     for (const key of Object.keys(value)) if (!Object.hasOwn(schema.properties, key)) fail(`has unknown property '${key}'`);
     for (const key of schema.required || []) if (!Object.hasOwn(value, key)) fail(`requires '${key}'`);
     const normalized = {};
     for (const [key, child] of Object.entries(schema.properties)) {
-      if (Object.hasOwn(value, key)) normalized[key] = validateArguments(child, value[key], `${location}.${key}`);
+      if (Object.hasOwn(value, key) && !(value[key] === null && Array.isArray(child.type) && child.type.includes('null'))) normalized[key] = validateArguments(child, value[key], `${location}.${key}`);
       else if (Object.hasOwn(child, "default")) normalized[key] = child.default;
     }
     return normalized;
   }
-  if (schema.type === "array") {
+  if (type === "array") {
     if (!Array.isArray(value)) fail("must be an array");
     if (value.length < (schema.minItems || 0)) fail(`needs at least ${schema.minItems} items`);
     if (value.length > (schema.maxItems ?? 10000)) fail("has too many items");
     return value.map((item, i) => validateArguments(schema.items, item, `${location}[${i}]`));
   }
-  if (schema.type === "integer" ? !Number.isSafeInteger(value) : typeof value !== schema.type) fail(`must be ${schema.type}`);
+  if (type === "integer" ? !Number.isSafeInteger(value) : typeof value !== type) fail(`must be ${type}`);
   if (schema.enum && !schema.enum.includes(value)) fail(`must be one of ${schema.enum.join(", ")}`);
   if (schema.minimum !== undefined && value < schema.minimum) fail(`must be >= ${schema.minimum}`);
   if (schema.maximum !== undefined && value > schema.maximum) fail(`must be <= ${schema.maximum}`);
